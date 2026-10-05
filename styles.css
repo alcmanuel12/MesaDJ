@@ -1,0 +1,8 @@
+@import url('https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,wght@0,400;0,600;1,400&display=swap');
+:root {
+  --font-heading: "Source Serif 4", system-ui, sans-serif;
+  --font-body: "Source Serif 4", system-ui, sans-serif;
+}
+*, *::before, *::after { box-sizing: border-box; }
+body { margin: 0; font-size: 15px; line-height: 1.55; font-weight: 400; font-family: var(--font-body); }
+:focus { outline: none; }

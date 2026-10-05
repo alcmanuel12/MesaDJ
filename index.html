@@ -1,0 +1,1333 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mesa DJ</title>
+<script>window.__resources = {
+  "https://unpkg.com/react@18.3.1/umd/react.production.min.js": "vendor/react.production.min.js",
+  "https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js": "vendor/react-dom.production.min.js"
+};</script>
+<script src="vendor/jsmediatags.min.js"></script>
+<script src="js/analysis.js"></script>
+<script src="js/engine.js"></script>
+<script src="js/library.js"></script>
+<script src="js/midi.js"></script>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="styles.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&display=swap" rel="stylesheet">
+<style>
+  body {
+    margin: 0;
+    background-color: #151618;
+    background-image:
+      url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 0.05 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>"),
+      repeating-linear-gradient(90deg, rgba(255,255,255,0.016) 0 1px, transparent 1px 3px),
+      radial-gradient(120% 80% at 50% 30%, #25272a 0%, #151618 60%, #0b0b0c 100%);
+    background-attachment: fixed;
+  }
+  /* es una consola: sin selección de texto (evita que arrastrar un fader inicie un arrastre de selección) */
+  body, button, canvas { -webkit-user-select: none; user-select: none; -webkit-user-drag: none; }
+  input { -webkit-user-select: text; user-select: text; }
+  a { color: #5cc9ee; }
+  a:hover { color: #9fe0f6; }
+  button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid #22b4e4; outline-offset: 2px; }
+</style>
+</helmet>
+
+<div style="--color-text:#ecebe8;--color-bg:#151618;--color-surface:#101113;--color-divider:rgba(255,255,255,0.16);position:relative;min-height:100vh;min-width:1240px;box-sizing:border-box;color:#ecebe8;font-family:var(--font-body);padding:10px 16px 22px;display:flex;flex-direction:column;gap:16px">
+
+  <div data-screen-label="Mesa" style="min-height:calc(100vh - 20px);display:flex;flex-direction:column;gap:8px">
+  <header data-screen-label="Barra superior" style="display:flex;align-items:center;gap:12px;height:44px;flex-shrink:0;padding:0 14px;background:linear-gradient(180deg,#2a2b2f,#18191c);border:1px solid #000;border-radius:10px;box-shadow:inset 0 1px 0 rgba(255,255,255,0.08), 0 10px 24px rgba(0,0,0,0.5)">
+    <div style="font-family:var(--font-heading);font-weight:600;font-size:20px;letter-spacing:-0.01em;white-space:nowrap;flex-shrink:0">Mesa de DJ</div>
+    <div style="display:flex;align-items:baseline;gap:6px;padding-left:6px;white-space:nowrap;flex-shrink:0">
+      <span style="font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:rgba(236,235,232,0.55)">Master</span>
+      <span style="font-size:20px;font-weight:600;font-variant-numeric:tabular-nums">{{ masterBpm }}</span>
+      <span style="font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:rgba(236,235,232,0.55)">BPM · Deck {{ masterNum }}</span>
+    </div>
+    <div style="flex:1 1 auto"></div>
+    <div style="display:flex;align-items:center;gap:6px">
+      
+      <sc-for list="{{ viewOpts }}" as="o" hint-placeholder-count="2">
+        <button onClick="{{ o.pick }}" style="{{ o.style }}">{{ o.label }}</button>
+      </sc-for>
+    </div>
+    <div style="display:flex;align-items:center;gap:6px">
+      
+      <sc-for list="{{ panelOpts }}" as="o" hint-placeholder-count="3">
+        <button onClick="{{ o.pick }}" style="{{ o.style }}">{{ o.label }}</button>
+      </sc-for>
+    </div>
+    <button onClick="{{ recToggle }}" style="{{ recStyle }}">● Rec {{ recTime }}</button>
+    <button onClick="{{ midiToggle }}" style="{{ midiStyle }}">MIDI learn</button>
+    <button onClick="{{ prefsOpenFn }}" style="{{ prefsBtnStyle }}">{{ latencyLabel }}</button>
+  </header>
+
+  <sc-if value="{{ audioHint }}" hint-placeholder-val="{{ false }}">
+    <div style="display:flex;align-items:center;gap:12px;padding:8px 14px;border-radius:8px;background:#22b4e4;color:#141414;font-size:13px">
+      <strong style="letter-spacing:0.1em;text-transform:uppercase;font-size:11px">Audio en pausa</strong>
+      <span>Haz clic en cualquier parte para activar el audio del navegador.</span>
+    </div>
+  </sc-if>
+  <sc-if value="{{ toast }}" hint-placeholder-val="{{ false }}">
+    <div style="display:flex;align-items:center;gap:12px;padding:8px 14px;border-radius:8px;background:#2a2b2f;border:1px solid #000;color:#ecebe8;font-size:13px">{{ toast }}</div>
+  </sc-if>
+  <sc-if value="{{ midi }}" hint-placeholder-val="{{ false }}">
+    <div style="display:flex;align-items:center;gap:12px;padding:8px 14px;border-radius:8px;background:#f2c200;color:#141414;font-size:13px">
+      <strong style="letter-spacing:0.1em;text-transform:uppercase;font-size:11px">MIDI learn activo</strong>
+      <span>{{ midiHint }}</span>
+      <span style="flex:1 1 auto"></span>
+      <span style="font-variant-numeric:tabular-nums">{{ midiCount }} asignaciones</span>
+      <button onClick="{{ midiClear }}" style="height:24px;padding:0 10px;border-radius:4px;border:1px solid #000;background:#141414;color:#f2c200;font-family:var(--font-body);font-size:11px;cursor:pointer">Borrar</button>
+    </div>
+  </sc-if>
+
+  <section data-screen-label="Formas de onda" style="background:#050506;border:1px solid #000;border-radius:12px;padding:8px;display:flex;flex-direction:column;gap:4px;box-shadow:inset 0 0 0 1px rgba(255,255,255,0.05), 0 18px 40px rgba(0,0,0,0.55)">
+    <sc-for list="{{ lanes }}" as="l" hint-placeholder-count="2">
+      <canvas data-lane="{{ l.deck }}" onPointerDown="{{ l.down }}" style="{{ laneStyle }}"></canvas>
+    </sc-for>
+    <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:4px 10px;margin-top:4px">
+      <sc-for list="{{ lanes }}" as="l" hint-placeholder-count="2">
+        <canvas data-ov="{{ l.deck }}" onPointerDown="{{ l.seek }}" style="display:block;width:100%;height:30px;cursor:pointer;border-radius:4px"></canvas>
+      </sc-for>
+    </div>
+  </section>
+
+  <sc-if value="{{ anyPanel }}" hint-placeholder-val="{{ true }}">
+    <section style="display:flex;gap:10px;align-items:stretch">
+      <sc-if value="{{ showFx }}" hint-placeholder-val="{{ true }}">
+        <div data-screen-label="Beat FX" style="flex:1.5 1 0;min-width:0;display:flex;align-items:center;gap:16px;padding:5px 16px;background:linear-gradient(180deg,#25262a,#18191c);border:1px solid #000;border-radius:10px;box-shadow:inset 0 1px 0 rgba(255,255,255,0.08), 0 12px 28px rgba(0,0,0,0.5)">
+          <div style="font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:rgba(236,235,232,0.55)">Beat FX</div>
+          <select value="{{ fxType }}" onChange="{{ fxTypeChange }}" style="height:30px;padding:0 8px;background:#0b0c0d;color:#ecebe8;border:1px solid #000;border-radius:4px;font-family:var(--font-body);font-size:13px">
+            <sc-for list="{{ fxTypes }}" as="o" hint-placeholder-count="8">
+              <option value="{{ o }}">{{ o }}</option>
+            </sc-for>
+          </select>
+          <div style="display:flex;gap:4px">
+            <sc-for list="{{ fxChans }}" as="c" hint-placeholder-count="5">
+              <button onClick="{{ c.pick }}" style="{{ c.style }}">{{ c.label }}</button>
+            </sc-for>
+          </div>
+          <div style="display:flex;align-items:center;gap:4px">
+            <button onClick="{{ fxPrev }}" style="{{ smallBtn }}">◀</button>
+            <div style="min-width:64px;text-align:center;line-height:1.1">
+              <div style="font-size:16px;font-weight:600;font-variant-numeric:tabular-nums">{{ fxBeats }}</div>
+              <div style="font-size:9px;letter-spacing:0.1em;text-transform:uppercase;color:rgba(236,235,232,0.55)">{{ fxMs }}</div>
+            </div>
+            <button onClick="{{ fxNext }}" style="{{ smallBtn }}">▶</button>
+          </div>
+          <div style="flex:1 1 auto"></div>
+          <div style="display:flex;flex-direction:column;align-items:center;gap:3px">
+            <div onPointerDown="{{ fxKnob.down }}" onDoubleClick="{{ fxKnob.reset }}" style="position:relative;width:28px;height:28px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#56585d,#1c1d20 72%);box-shadow:0 3px 6px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.14), 0 0 0 3px #111214;cursor:ns-resize;touch-action:none">
+              <div style="{{ fxKnob.rot }}"><div style="position:absolute;left:50%;top:2px;width:2px;height:8px;background:#ffffff;transform:translateX(-50%);border-radius:1px"></div></div>
+            </div>
+            <div style="font-size:9px;letter-spacing:0.08em;text-transform:uppercase;color:rgba(236,235,232,0.6)">Nivel</div>
+          </div>
+          <button onClick="{{ fxToggle }}" style="{{ fxOnStyle }}">{{ fxOnLabel }}</button>
+        </div>
+      </sc-if>
+      <sc-if value="{{ showSampler }}" hint-placeholder-val="{{ true }}">
+        <div data-screen-label="Sampler" style="flex:1.2 1 0;min-width:0;display:flex;align-items:center;gap:12px;padding:5px 16px;background:linear-gradient(180deg,#25262a,#18191c);border:1px solid #000;border-radius:10px;box-shadow:inset 0 1px 0 rgba(255,255,255,0.08), 0 12px 28px rgba(0,0,0,0.5)">
+          <div style="font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:rgba(236,235,232,0.55)">Sampler</div>
+          <div style="flex:1 1 auto;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px">
+            <sc-for list="{{ samples }}" as="sm" hint-placeholder-count="8">
+              <button onClick="{{ sm.fire }}" onContextMenu="{{ sm.load }}" title="Clic derecho: cargar tu propio sonido" style="{{ sm.style }}">{{ sm.label }}</button>
+            </sc-for>
+          </div>
+          <div style="display:flex;flex-direction:column;align-items:center;gap:3px">
+            <div onPointerDown="{{ smpKnob.down }}" onDoubleClick="{{ smpKnob.reset }}" style="position:relative;width:28px;height:28px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#56585d,#1c1d20 72%);box-shadow:0 3px 6px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.14), 0 0 0 3px #111214;cursor:ns-resize;touch-action:none">
+              <div style="{{ smpKnob.rot }}"><div style="position:absolute;left:50%;top:2px;width:2px;height:8px;background:#ffffff;transform:translateX(-50%);border-radius:1px"></div></div>
+            </div>
+            <div style="font-size:9px;letter-spacing:0.08em;text-transform:uppercase;color:rgba(236,235,232,0.6)">Volumen</div>
+          </div>
+        </div>
+      </sc-if>
+      <sc-if value="{{ showRec }}" hint-placeholder-val="{{ false }}">
+        <div data-screen-label="Grabación" style="flex:0.8 1 0;min-width:0;display:flex;align-items:center;gap:14px;padding:5px 16px;background:linear-gradient(180deg,#25262a,#18191c);border:1px solid #000;border-radius:10px;box-shadow:inset 0 1px 0 rgba(255,255,255,0.08), 0 12px 28px rgba(0,0,0,0.5)">
+          <button onClick="{{ recToggle }}" style="{{ recBigStyle }}">Rec</button>
+          <div style="min-width:0;flex:1 1 auto;display:flex;flex-direction:column;gap:5px">
+            <div style="display:flex;justify-content:space-between;gap:8px">
+              <span style="font-size:17px;font-weight:600;font-variant-numeric:tabular-nums">{{ recTime }}</span>
+              <span style="font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:rgba(236,235,232,0.55);align-self:center">{{ recState }}</span>
+            </div>
+            <div style="height:5px;background:#050506;border-radius:3px;overflow:hidden"><div style="{{ recLevel }}"></div></div>
+            <div style="font-size:11px;color:rgba(236,235,232,0.55);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ recFile }}</div>
+          </div>
+        </div>
+      </sc-if>
+    </section>
+  </sc-if>
+
+  <section style="flex:1 1 auto;display:grid;grid-template-columns:minmax(0,1fr) 300px minmax(0,1fr);gap:12px;align-items:stretch">
+    <sc-for list="{{ sides }}" as="d" hint-placeholder-count="2">
+      <div style="{{ d.place }}">
+        <div data-screen-label="Deck" onDragOver="{{ d.onDragOver }}" onDrop="{{ d.onDrop }}" style="position:relative;height:100%;box-sizing:border-box;background-color:#232427;background-image:repeating-linear-gradient(90deg, rgba(255,255,255,0.022) 0 1px, transparent 1px 2px),linear-gradient(180deg,#2e2f33 0%,#1d1e21 100%);border:1px solid #0a0a0b;border-radius:14px;padding:12px 18px;box-shadow:inset 0 1px 0 rgba(255,255,255,0.10), inset 0 -2px 0 rgba(0,0,0,0.5), 0 22px 44px rgba(0,0,0,0.6);display:flex;flex-direction:column;gap:10px;justify-content:space-between">
+          <div style="position:absolute;top:8px;left:8px;width:8px;height:8px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#8a8c90,#35363a 70%)"></div>
+          <div style="position:absolute;top:8px;right:8px;width:8px;height:8px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#8a8c90,#35363a 70%)"></div>
+          <div style="position:absolute;bottom:8px;left:8px;width:8px;height:8px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#8a8c90,#35363a 70%)"></div>
+          <div style="position:absolute;bottom:8px;right:8px;width:8px;height:8px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#8a8c90,#35363a 70%)"></div>
+
+          <div style="display:flex;align-items:flex-start;gap:14px">
+            <div style="display:flex;flex-direction:column;align-items:center;gap:6px">
+              <div style="{{ d.numStyle }}">{{ d.num }}</div>
+              <div style="display:flex;gap:3px">
+                <sc-for list="{{ d.layers }}" as="ly" hint-placeholder-count="2">
+                  <button onClick="{{ ly.pick }}" style="{{ ly.style }}">{{ ly.label }}</button>
+                </sc-for>
+              </div>
+            </div>
+            <div style="flex:1 1 auto;min-width:0">
+              <div style="font-family:var(--font-heading);font-weight:600;font-size:24px;line-height:1.1;letter-spacing:-0.015em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ d.title }}</div>
+              <div style="font-size:14px;font-style:italic;color:rgba(236,235,232,0.6)">{{ d.artist }}</div>
+              <div style="display:flex;gap:5px;margin-top:8px;flex-wrap:wrap">
+                <sc-for list="{{ d.badges }}" as="bd" hint-placeholder-count="4">
+                  <span style="{{ bd.style }}">{{ bd.label }}</span>
+                </sc-for>
+              </div>
+            </div>
+            <div style="text-align:right;flex:0 0 auto">
+              <div style="font-size:30px;font-weight:600;line-height:1;font-variant-numeric:tabular-nums">{{ d.bpm }}</div>
+              <div style="font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:rgba(236,235,232,0.55);margin-top:3px">BPM · {{ d.pitch }}</div>
+              <div style="font-size:14px;margin-top:5px">Tono <strong>{{ d.key }}</strong></div>
+            </div>
+          </div>
+
+          <div style="display:flex;justify-content:space-between;align-items:baseline;font-variant-numeric:tabular-nums;background:#0b0c0d;border-radius:6px;padding:3px 12px;box-shadow:inset 0 1px 3px #000">
+            <div style="display:flex;align-items:baseline;gap:8px"><span style="font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:rgba(236,235,232,0.55)">Transcurrido</span><span style="font-size:22px;font-weight:600">{{ d.elapsed }}</span></div>
+            <div style="display:flex;align-items:baseline;gap:8px"><span style="font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:rgba(236,235,232,0.55)">Restante</span><span style="font-size:22px;font-weight:600;color:rgba(236,235,232,0.55)">-{{ d.remaining }}</span></div>
+          </div>
+
+          <div style="display:grid;grid-template-columns:196px minmax(0,1fr) 40px;gap:14px;align-items:start">
+            <div style="display:flex;flex-direction:column;align-items:center;gap:8px">
+              <div onPointerDown="{{ d.jogDown }}" style="position:relative;width:196px;height:196px;border-radius:50%;cursor:grab;touch-action:none;user-select:none">
+                <div style="{{ d.ring }}"></div>
+                <div style="position:absolute;inset:11px;border-radius:50%;background:conic-gradient(from 20deg,#6d6f73,#2b2c2f,#8a8c90,#2b2c2f,#6d6f73,#2b2c2f,#8a8c90,#2b2c2f,#6d6f73);box-shadow:0 6px 16px rgba(0,0,0,0.6), inset 0 0 0 1px rgba(0,0,0,0.6)"></div>
+                <div style="position:absolute;inset:17px;border-radius:50%;background:repeating-conic-gradient(from 0deg, rgba(255,255,255,0.35) 0deg 0.5deg, transparent 0.5deg 6deg);mask:radial-gradient(closest-side, transparent 88%, #000 89%);-webkit-mask:radial-gradient(closest-side, transparent 88%, #000 89%)"></div>
+                <div style="{{ d.platter }}">
+                  <div style="{{ d.marker }}"></div>
+                </div>
+                <div style="position:absolute;left:50%;top:50%;width:74px;height:74px;border-radius:50%;transform:translate(-50%,-50%);background:#0b0c0d;box-shadow:inset 0 0 0 1px rgba(255,255,255,0.1), 0 2px 6px #000;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;pointer-events:none">
+                  <div style="font-size:9px;letter-spacing:0.14em;text-transform:uppercase;color:rgba(236,235,232,0.55)">{{ d.jogMode }}</div>
+                  <div style="{{ d.jogInfoStyle }}">{{ d.jogInfo }}</div>
+                </div>
+              </div>
+              <div style="display:flex;gap:16px">
+                <button onPointerDown="{{ d.cue }}" onPointerUp="{{ d.cueUp }}" onPointerLeave="{{ d.cueUp }}" style="{{ d.cueStyle }}">Cue</button>
+                <button onClick="{{ d.toggle }}" style="{{ d.playStyle }}">{{ d.playLabel }}</button>
+              </div>
+            </div>
+
+            <div style="display:flex;flex-direction:column;gap:8px;min-width:0">
+              <div style="display:flex;flex-direction:column;gap:5px">
+                <div style="font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:rgba(236,235,232,0.55)">Tempo</div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px">
+                  <sc-for list="{{ d.toggles }}" as="tg" hint-placeholder-count="4">
+                    <button onClick="{{ tg.click }}" style="{{ tg.style }}">{{ tg.label }}</button>
+                  </sc-for>
+                </div>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:5px">
+                <div style="display:flex;justify-content:space-between;font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:rgba(236,235,232,0.55)"><span>Loop</span><span>{{ d.loopInfo }}</span></div>
+                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:5px">
+                  <button onClick="{{ d.loopIn }}" style="{{ d.loopInStyle }}">In</button>
+                  <button onClick="{{ d.loopOut }}" style="{{ d.loopOutStyle }}">Out</button>
+                  <button onClick="{{ d.loopExit }}" style="{{ d.loopExitStyle }}">{{ d.loopExitLabel }}</button>
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 1.3fr 1fr;gap:5px">
+                  <button onClick="{{ d.loopHalf }}" style="{{ d.plainBtn }}">½ ×</button>
+                  <button onClick="{{ d.loopAuto }}" style="{{ d.loopAutoStyle }}">Auto {{ d.loopBeats }}</button>
+                  <button onClick="{{ d.loopDouble }}" style="{{ d.plainBtn }}">2 ×</button>
+                </div>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:5px">
+                <div style="display:flex;justify-content:space-between;font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:rgba(236,235,232,0.55)"><span>Memory cue</span><span>{{ d.memCount }}</span></div>
+                <div style="display:grid;grid-template-columns:1fr 1.3fr 1fr;gap:5px">
+                  <button onClick="{{ d.memPrev }}" style="{{ d.plainBtn }}">◀</button>
+                  <button onClick="{{ d.memAdd }}" style="{{ d.memStyle }}">Mem</button>
+                  <button onClick="{{ d.memNext }}" style="{{ d.plainBtn }}">▶</button>
+                </div>
+              </div>
+            </div>
+
+            <div style="display:flex;flex-direction:column;align-items:center;gap:6px">
+              <button onClick="{{ d.rangeClick }}" style="{{ d.rangeStyle }}">{{ d.rangeLabel }}</button>
+              <div onPointerDown="{{ d.pitchDown }}" onDoubleClick="{{ d.pitchReset }}" style="position:relative;width:30px;height:196px;cursor:ns-resize;touch-action:none">
+                <div style="position:absolute;left:10px;width:10px;top:0;bottom:0;background:#050506;border-radius:5px;box-shadow:inset 0 1px 3px #000"></div>
+                <div style="position:absolute;left:-2px;right:-2px;top:50%;height:1px;background:rgba(255,255,255,0.35)"></div>
+                <div style="{{ d.pitchHandle }}"><div style="position:absolute;left:3px;right:3px;top:50%;height:2px;background:#ffffff;transform:translateY(-50%)"></div></div>
+              </div>
+              <div style="font-size:11px;font-variant-numeric:tabular-nums;white-space:nowrap">{{ d.tempoVal }}</div>
+            </div>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:7px">
+            <div style="display:flex;gap:4px">
+              <sc-for list="{{ d.modes }}" as="md" hint-placeholder-count="6">
+                <button onClick="{{ md.pick }}" style="{{ md.style }}">{{ md.label }}</button>
+              </sc-for>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px">
+              <sc-for list="{{ d.pads }}" as="p" hint-placeholder-count="8">
+                <button onPointerDown="{{ p.down }}" onPointerUp="{{ p.up }}" onPointerLeave="{{ p.up }}" onContextMenu="{{ p.ctx }}" style="{{ p.style }}">
+                  <span style="font-size:14px;font-weight:600;line-height:1">{{ p.label }}</span>
+                  <span style="font-size:9px;letter-spacing:0.06em;text-transform:uppercase;opacity:0.75">{{ p.sub }}</span>
+                </button>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+      </div>
+    </sc-for>
+
+    <div data-screen-label="Mezclador" style="grid-column:2;grid-row:1;position:relative;box-sizing:border-box;background-color:#18191b;background-image:repeating-linear-gradient(90deg, rgba(255,255,255,0.018) 0 1px, transparent 1px 2px),linear-gradient(180deg,#212225 0%,#141517 100%);border:1px solid #070708;border-radius:14px;padding:12px 12px 14px;box-shadow:inset 0 1px 0 rgba(255,255,255,0.08), 0 22px 44px rgba(0,0,0,0.6);display:flex;flex-direction:column;gap:12px">
+      <div style="font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:rgba(236,235,232,0.55);text-align:center">Mezclador</div>
+      <div style="display:flex;gap:6px;justify-content:space-between;flex:1 1 auto">
+        <sc-for list="{{ channels }}" as="ch" hint-placeholder-count="2">
+          <div style="flex:1 1 0;min-width:0;display:flex;flex-direction:column;align-items:center;gap:5px">
+            <div style="{{ ch.labelStyle }}">{{ ch.label }}</div>
+            <sc-for list="{{ ch.knobs }}" as="k" hint-placeholder-count="5">
+              <div style="display:flex;flex-direction:column;align-items:center;gap:2px;min-width:0">
+                <div onPointerDown="{{ k.down }}" onDoubleClick="{{ k.reset }}" style="position:relative;width:28px;height:28px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#56585d,#1c1d20 72%);box-shadow:0 3px 6px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.14), 0 0 0 3px #111214;cursor:ns-resize;touch-action:none">
+                  <div style="{{ k.rot }}"><div style="position:absolute;left:50%;top:2px;width:2px;height:8px;background:#ffffff;transform:translateX(-50%);border-radius:1px"></div></div>
+                </div>
+                <div style="font-size:9px;letter-spacing:0.08em;text-transform:uppercase;color:rgba(236,235,232,0.6);white-space:nowrap">{{ k.label }}</div>
+              </div>
+            </sc-for>
+            <button onClick="{{ ch.cueClick }}" style="{{ ch.cueStyle }}">Cue ◖</button>
+            <div style="display:flex;gap:6px;align-items:stretch;height:112px;margin-top:2px">
+              <div style="display:flex;flex-direction:column;gap:2px;width:6px">
+                <sc-for list="{{ ch.vu }}" as="seg" hint-placeholder-count="14">
+                  <div style="{{ seg }}"></div>
+                </sc-for>
+              </div>
+              <div onPointerDown="{{ ch.down }}" onDoubleClick="{{ ch.reset }}" style="position:relative;width:26px;height:100%;cursor:ns-resize;touch-action:none">
+                <div style="position:absolute;left:8px;width:10px;top:0;bottom:0;background:#050506;border-radius:5px;box-shadow:inset 0 1px 3px #000"></div>
+                <div style="{{ ch.handle }}"><div style="position:absolute;left:3px;right:3px;top:50%;height:2px;background:#ffffff;transform:translateY(-50%)"></div></div>
+              </div>
+            </div>
+            
+          </div>
+        </sc-for>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:6px">
+        <div style="display:flex;justify-content:space-between;font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:rgba(236,235,232,0.55)"><span>A</span><span>Crossfader</span><span>B</span></div>
+        <div onPointerDown="{{ xfDown }}" onDoubleClick="{{ xfReset }}" style="position:relative;height:30px;cursor:ew-resize;touch-action:none">
+          <div style="position:absolute;top:10px;height:10px;left:0;right:0;background:#050506;border-radius:5px;box-shadow:inset 0 1px 3px #000"></div>
+          <div style="{{ xfHandle }}"><div style="position:absolute;top:3px;bottom:3px;left:50%;width:2px;background:#ffffff;transform:translateX(-50%)"></div></div>
+        </div>
+      </div>
+      <div style="display:flex;justify-content:space-around">
+        <sc-for list="{{ masterKnobs }}" as="k" hint-placeholder-count="3">
+          <div style="display:flex;flex-direction:column;align-items:center;gap:2px;min-width:0">
+            <div onPointerDown="{{ k.down }}" onDoubleClick="{{ k.reset }}" style="position:relative;width:28px;height:28px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#56585d,#1c1d20 72%);box-shadow:0 3px 6px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.14), 0 0 0 3px #111214;cursor:ns-resize;touch-action:none">
+              <div style="{{ k.rot }}"><div style="position:absolute;left:50%;top:2px;width:2px;height:8px;background:#ffffff;transform:translateX(-50%);border-radius:1px"></div></div>
+            </div>
+            <div style="font-size:9px;letter-spacing:0.08em;text-transform:uppercase;color:rgba(236,235,232,0.6);white-space:nowrap">{{ k.label }}</div>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+  </section>
+
+  </div>
+
+  <section data-screen-label="Navegador" onDragOver="{{ onDragOver }}" onDragLeave="{{ onDragLeave }}" onDrop="{{ onDrop }}" style="display:grid;grid-template-columns:minmax(0,1fr);gap:0;background:linear-gradient(180deg,#1c1d20,#131416);border:1px solid #070708;border-radius:14px;box-shadow:inset 0 1px 0 rgba(255,255,255,0.07), 0 22px 44px rgba(0,0,0,0.55);overflow:hidden">
+    <div style="min-width:0;display:flex;flex-direction:column">
+      <div style="display:flex;align-items:center;gap:10px;padding:10px 14px">
+        <div style="font-family:var(--font-heading);font-weight:600;font-size:20px;letter-spacing:-0.01em">Pistas</div>
+        <span style="font-size:11px;color:rgba(236,235,232,0.5);font-variant-numeric:tabular-nums">{{ rowCount }}</span>
+        <input value="{{ query }}" onChange="{{ onQuery }}" placeholder="Buscar título, artista, tono…" style="margin-left:12px;height:30px;width:240px;padding:0 10px;background:#0b0c0d;color:#ecebe8;border:1px solid #000;border-radius:4px;font-family:var(--font-body);font-size:13px;box-shadow:inset 0 1px 2px #000">
+        <div style="flex:1 1 auto"></div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <div onPointerDown="{{ encDown }}" onWheel="{{ encWheel }}" title="Gira para desplazarte, pulsa para abrir" style="position:relative;width:36px;height:36px;border-radius:50%;background:repeating-conic-gradient(from 0deg,#3d3f43 0deg 6deg,#24252a 6deg 12deg);box-shadow:0 3px 6px rgba(0,0,0,0.6), 0 0 0 3px #0e0f11;cursor:ns-resize;touch-action:none">
+            <div style="{{ encRot }}"><div style="position:absolute;left:50%;top:3px;width:2px;height:9px;background:#ffffff;transform:translateX(-50%)"></div></div>
+            <div style="position:absolute;inset:9px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#55575c,#1e1f22);pointer-events:none"></div>
+          </div>
+          <span style="font-size:9px;letter-spacing:0.1em;text-transform:uppercase;color:rgba(236,235,232,0.55)">Encoder</span>
+        </div>
+        <button onClick="{{ back }}" style="{{ smallBtnWide }}">Back</button>
+        <button onClick="{{ loadL }}" style="{{ loadLStyle }}">◀ Load {{ loadLNum }}</button>
+        <button onClick="{{ loadR }}" style="{{ loadRStyle }}">Load {{ loadRNum }} ▶</button>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;padding:0 14px 8px">
+        <button onClick="{{ pickFiles }}" style="{{ smallBtnWide }}">Elegir archivos</button>
+        <button onClick="{{ pickFolder }}" style="{{ smallBtnWide }}">Elegir carpeta</button>
+        <span style="font-size:12px;color:#5cc9ee;font-variant-numeric:tabular-nums;max-width:340px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ importing }}</span>
+        <div style="flex:1 1 auto"></div>
+        <button onClick="{{ bpmHalf }}" title="El BPM detectado es el doble: dividir entre 2" style="{{ smallBtnWide }}">BPM ÷2</button>
+        <button onClick="{{ bpmDouble }}" title="El BPM detectado es la mitad: multiplicar por 2" style="{{ smallBtnWide }}">BPM ×2</button>
+        <button onClick="{{ removeFn }}" style="{{ smallBtnWide }}">{{ removeLabel }}</button>
+      </div>
+      <div style="{{ dropZoneStyle }}">{{ dropZoneText }}</div>
+      <div data-rows="1" style="position:relative;max-height:320px;overflow:auto">
+        <div style="display:grid;grid-template-columns:30px 30px minmax(0,1.6fr) minmax(0,1.2fr) 64px 56px 76px;position:sticky;top:0;z-index:1;background:#16171a;font-size:14px">
+          <div style="font-weight:400;font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:rgba(236,235,232,0.5);padding:6px 8px"></div>
+          <div style="font-weight:400;font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:rgba(236,235,232,0.5);padding:6px 8px">#</div>
+          <div style="font-weight:400;font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:rgba(236,235,232,0.5);padding:6px 8px">Pista</div>
+          <div style="font-weight:400;font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:rgba(236,235,232,0.5);padding:6px 8px">Artista</div>
+          <div style="font-weight:400;font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:rgba(236,235,232,0.5);padding:6px 8px">BPM</div>
+          <div style="font-weight:400;font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:rgba(236,235,232,0.5);padding:6px 8px">Tono</div>
+          <div style="font-weight:400;font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:rgba(236,235,232,0.5);padding:6px 8px">Duración</div>
+        </div>
+        <div style="font-size:14px">
+        <sc-for list="{{ rows }}" as="r" hint-placeholder-count="8">
+          <div data-sel="{{ r.sel }}" onClick="{{ r.pick }}" onDoubleClick="{{ r.loadL }}" style="{{ r.style }}">
+            <div style="padding:7px 8px;align-self:center"><span style="{{ r.dot }}">{{ r.loaded }}</span></div>
+            <div style="padding:7px 8px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;align-self:center;font-size:11px;opacity:0.5;font-variant-numeric:tabular-nums">{{ r.num }}</div>
+            <div style="padding:7px 8px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;align-self:center;font-family:var(--font-heading);font-weight:600">{{ r.title }}</div>
+            <div style="padding:7px 8px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;align-self:center;font-style:italic;opacity:0.7">{{ r.artist }}</div>
+            <div style="padding:7px 8px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;align-self:center;font-variant-numeric:tabular-nums">{{ r.bpm }}</div>
+            <div style="padding:7px 8px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;align-self:center;font-variant-numeric:tabular-nums">{{ r.key }}</div>
+            <div style="padding:7px 8px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;align-self:center;font-variant-numeric:tabular-nums;opacity:0.7">{{ r.dur }}</div>
+          </div>
+        </sc-for>
+        </div>
+        <sc-if value="{{ browserEmpty }}" hint-placeholder-val="{{ false }}">
+          <div style="padding:30px 16px;color:rgba(236,235,232,0.55);font-size:14px">{{ emptyMsg }}</div>
+        </sc-if>
+      </div>
+    </div>
+  </section>
+
+  <sc-if value="{{ prefsOpen }}" hint-placeholder-val="{{ false }}">
+    <div onClick="{{ prefsClose }}" style="position:fixed;inset:0;background:rgba(0,0,0,0.55);display:grid;place-items:center;z-index:10">
+      <div onClick="{{ stop }}" style="width:460px;max-height:90vh;overflow:auto;background:linear-gradient(180deg,#2a2b2f,#1b1c1f);border:1px solid #000;border-radius:12px;padding:22px;box-shadow:0 30px 60px rgba(0,0,0,0.6);display:flex;flex-direction:column;gap:16px">
+        <div style="font-family:var(--font-heading);font-weight:600;font-size:22px">Preferencias de audio</div>
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <div style="font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:rgba(236,235,232,0.55)">Tamaño de búfer</div>
+          <div style="display:flex;gap:5px">
+            <sc-for list="{{ bufOpts }}" as="o" hint-placeholder-count="5">
+              <button onClick="{{ o.pick }}" style="{{ o.style }}">{{ o.label }}</button>
+            </sc-for>
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <div style="font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:rgba(236,235,232,0.55)">Frecuencia de muestreo</div>
+          <div style="display:flex;gap:5px">
+            <sc-for list="{{ rateOpts }}" as="o" hint-placeholder-count="2">
+              <button onClick="{{ o.pick }}" style="{{ o.style }}">{{ o.label }}</button>
+            </sc-for>
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <div style="display:flex;justify-content:space-between"><span style="font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:rgba(236,235,232,0.55)">Salida master</span><button onClick="{{ detect }}" style="background:none;border:0;color:#5cc9ee;font-family:var(--font-body);font-size:12px;cursor:pointer">Detectar dispositivos</button></div>
+          <select value="{{ masterSink }}" onChange="{{ masterSinkChange }}" style="{{ selectStyle }}">
+            <sc-for list="{{ devOpts }}" as="o" hint-placeholder-count="2"><option value="{{ o.id }}">{{ o.label }}</option></sc-for>
+          </select>
+          <div style="font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:rgba(236,235,232,0.55);margin-top:6px">Auriculares (cue)</div>
+          <select value="{{ phonesSink }}" onChange="{{ phonesSinkChange }}" style="{{ selectStyle }}">
+            <sc-for list="{{ phOpts }}" as="o" hint-placeholder-count="2"><option value="{{ o.id }}">{{ o.label }}</option></sc-for>
+          </select>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <div style="display:flex;justify-content:space-between"><span style="font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:rgba(236,235,232,0.55)">Controladora MIDI</span><button onClick="{{ midiRetry }}" style="background:none;border:0;color:#5cc9ee;font-family:var(--font-body);font-size:12px;cursor:pointer">Reconectar</button></div>
+          <div style="font-size:13px;color:rgba(236,235,232,0.8)">{{ midiDevNames }}</div>
+          <div style="font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:rgba(236,235,232,0.55);margin-top:4px">Encoders y platos (modo relativo)</div>
+          <div style="display:flex;gap:5px"><sc-for list="{{ relOpts }}" as="o" hint-placeholder-count="3"><button onClick="{{ o.pick }}" style="{{ o.style }}">{{ o.label }}</button></sc-for></div>
+          <div style="display:flex;gap:5px;margin-top:4px"><button onClick="{{ midiExport }}" style="{{ smallBtnWide }}">Exportar mapeo</button><button onClick="{{ midiImport }}" style="{{ smallBtnWide }}">Importar mapeo</button></div>
+          <div style="font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:rgba(236,235,232,0.55);margin-top:4px">Asignaciones ({{ midiRowCount }})</div>
+          <div style="max-height:130px;overflow:auto;display:flex;flex-direction:column;gap:2px">
+            <sc-for list="{{ midiRows }}" as="r" hint-placeholder-count="2">
+              <div style="display:flex;justify-content:space-between;gap:8px;font-size:12px;padding:3px 6px;background:rgba(0,0,0,0.25);border-radius:3px"><span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ r.name }}</span><span style="opacity:0.6;white-space:nowrap">{{ r.msg }}</span><button onClick="{{ r.del }}" style="background:none;border:0;color:#ff6b6b;cursor:pointer">✕</button></div>
+            </sc-for>
+          </div>
+        </div>
+        <div style="font-size:14px;color:rgba(236,235,232,0.75)">Latencia de salida: <strong>{{ latencyLabel }}</strong>.</div>
+        <div style="display:flex;justify-content:flex-end">
+          <button onClick="{{ prefsClose }}" style="{{ smallBtnWide }}">Cerrar</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;windowSeconds&quot;:{&quot;editor&quot;:&quot;range&quot;,&quot;default&quot;:8,&quot;min&quot;:4,&quot;max&quot;:24,&quot;step&quot;:1,&quot;unit&quot;:&quot;s&quot;,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;Formas de onda&quot;},&quot;laneH&quot;:{&quot;editor&quot;:&quot;range&quot;,&quot;default&quot;:52,&quot;min&quot;:40,&quot;max&quot;:160,&quot;step&quot;:4,&quot;unit&quot;:&quot;px&quot;,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;Formas de onda&quot;},&quot;showBeatGrid&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Formas de onda&quot;}}">
+const LIB = [];                 // pistas arrastradas (solo en memoria)
+const LIBMAP = new Map();
+const EMPTY = { id: 0, title: "Sin pista", artist: "Carga una pista desde el navegador", bpm: 120, key: "—", dur: 1, firstBeat: 0, };
+const FLAT = { amp: new Float32Array([0.03]), low: new Float32Array([0.02]), rate: 100 };
+const C = ["#22b4e4", "#ff2e8e", "#f2c200", "#d9d7d2"];
+const CUEC = ["#ff3b3b", "#ff8a2e", "#f2c200", "#5fe08a", "#22b4e4", "#3c6cff", "#a07cff", "#ff2e8e"];
+const MODES = [
+  { id: "hot", label: "Hot cue", col: "#ff8a2e" },
+  { id: "fx", label: "Pad FX", col: "#a07cff" },
+  { id: "jump", label: "Beat jump", col: "#5fe08a" },
+  { id: "smp", label: "Sampler", col: "#ff2e8e" },
+  { id: "bloop", label: "Beat loop", col: "#f2c200" },
+  { id: "key", label: "Keyboard", col: "#22b4e4" },
+];
+const PADFX = ["Echo", "Roll ¼", "Roll ½", "Trans", "Filtro", "Reverb", "Flanger", "Brake"];
+const JUMPS = [-1, 1, -4, 4, -16, 16, -32, 32];
+const BLOOPS = [0.25, 0.5, 1, 2, 4, 8, 16, 32];
+const KEYS = [-3, -2, -1, 0, 1, 2, 3, 4];
+const SAMPLES = ["Bocina", "Rewind", "Sirena", "Voz Hey", "Palmas", "Riser", "Impacto", "Scratch"];
+const FX_TYPES = ["Delay", "Echo", "Reverb", "Spiral", "Flanger", "Phaser", "Filtro", "Roll", "Trans", "Pitch"];
+const FX_BEATS = [0.125, 0.25, 0.5, 0.75, 1, 2, 4, 8, 16];
+const BUFS = [64, 128, 256, 512, 1024];
+const RATES = [44100, 48000];
+const LBL = "font-size:10px;letter-spacing:0.12em;text-transform:uppercase;";
+const PREFS_KEY = "mesadj.prefs";
+
+const ls = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} },
+};
+const pad2 = (n) => String(n).padStart(2, "0");
+const dayKey = (d) => { d = d || new Date(); return d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate()); };
+const dayLabel = (k) => { const [y, m, d] = k.split("-"); return d + "/" + m + "/" + y; };
+function syncLib() { LIBMAP.clear(); LIB.forEach((t) => LIBMAP.set(t.id, t)); }
+
+function mmss(s) {
+  s = Math.max(0, Math.floor(s));
+  return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0");
+}
+function beatsLabel(b) {
+  if (b === 0.75) return "3/4";
+  if (b < 1) return "1/" + Math.round(1 / b);
+  return String(b);
+}
+function keyShifted(key, s) {
+  const num = parseInt(key, 10);
+  if (isNaN(num)) return key;
+  const letter = key.replace(/\d+/, "");
+  const n = (((num - 1 + 7 * s) % 12) + 12) % 12 + 1;
+  return n + letter;
+}
+function mkDeck(track, o) {
+  return Object.assign({
+    track: track || 0, play: false, pitch: 0, range: 8, sync: false, keyLock: true, vinyl: true, loading: false,
+    loop: { on: false, in: null, out: null, beats: 4 }, hot: [null, null, null, null, null, null, null, null],
+    mem: [], padMode: "hot", keyShift: 0, cuePt: 0,
+  }, o);
+}
+const BTN = "display:flex;align-items:center;justify-content:center;gap:4px;height:30px;padding:0 8px;border-radius:4px;border:1px solid #000;font-family:var(--font-body);font-size:11px;letter-spacing:0.08em;text-transform:uppercase;cursor:pointer;white-space:nowrap;min-width:0;";
+function hw(on, col, extra) {
+  return BTN + (on
+    ? "background:" + col + ";color:#0b0b0c;font-weight:600;box-shadow:0 0 14px " + col + "80, inset 0 1px 0 rgba(255,255,255,0.35);"
+    : "background:linear-gradient(180deg,#36373c,#232428);color:#d6d5d2;box-shadow:inset 0 1px 0 rgba(255,255,255,0.1), 0 1px 2px rgba(0,0,0,0.6);") + (extra || "");
+}
+function round(on, col) {
+  return "width:52px;height:52px;border-radius:50%;border:1px solid #000;display:grid;place-items:center;cursor:pointer;font-family:var(--font-body);font-size:11px;letter-spacing:0.1em;text-transform:uppercase;" +
+    (on ? "background:radial-gradient(circle at 50% 35%," + col + "," + col + "cc);color:#0b0b0c;font-weight:600;box-shadow:0 0 18px " + col + "90, 0 0 0 3px #111214;"
+        : "background:radial-gradient(circle at 50% 35%,#3a3b40,#1f2023);color:" + col + ";box-shadow:inset 0 1px 0 rgba(255,255,255,0.1), 0 0 0 3px #111214, inset 0 0 0 2px " + col + "55;");
+}
+
+class Component extends DCLogic {
+  state = {
+    decks: [mkDeck(0), mkDeck(0), mkDeck(0, { padMode: "bloop" }), mkDeck(0, { padMode: "jump" })],
+    master: 0, view: 2, layer: [0, 1],
+    panels: { fx: true, sampler: true, rec: false },
+    mix: [0, 1, 2, 3].map((i) => ({ trim: 0.5, hi: 0.5, mid: 0.5, low: 0.5, color: 0.5, fader: 0.8, cue: false })),
+    xf: 0.5, mvol: 0.75, phMix: 0.5, phVol: 0.6,
+    fx: { type: "Echo", ch: "Master", beats: 0.5, level: 0.6, on: false },
+    smpVol: 0.7, smpFlash: -1, smpNames: SAMPLES.slice(),
+    rec: { on: false, start: 0, file: "" },
+    midi: false, midiCount: 0, midiHint: "", midiDevs: 0, midiOk: true,
+    prefs: false, buf: 256, rate: 48000, masterSink: "", phonesSink: "", devOut: [],
+    sel: 0, focus: "list", query: "", libVer: 0, importing: "", toast: "", dragging: false,
+    audioHint: false, padFx: [null, null, null, null], held: "", tick: 0,
+  };
+  t = [0, 0, 0, 0];
+  lastEng = [0, 0, 0, 0];
+  loopSig = ["", "", "", ""];
+  vu = [0, 0, 0, 0];
+  bend = [0, 0, 0, 0];
+  angle = [0, 40, 80, 120];
+  hold = [false, false, false, false];
+  bendHold = [0, 0, 0, 0];
+  cuePrev = [false, false, false, false];
+  jogLbl = [null, null, null, null];
+  padHeld = [null, null, null, null];
+  waves = {};
+  names = {};
+  cueTimers = {};
+  mixSig = "";
+  eng = new DJEngine();
+  midi = new DJMidi();
+
+  track(id) { return LIBMAP.get(id) || EMPTY; }
+  wave(id) { return this.waves[id] || FLAT; }
+  hasTrack(i) { return this.state.decks[i].track !== 0 && !!(this.eng && this.eng.dk[i].buf); }
+  effPitch(i) {
+    const s = this.state, d = s.decks[i];
+    if (d.sync && s.master !== i && this.hasTrack(s.master)) {
+      const m = s.decks[s.master], mb = this.track(m.track).bpm * (1 + m.pitch / 100);
+      return (mb / this.track(d.track).bpm - 1) * 100;
+    }
+    return d.pitch;
+  }
+  bpmEff(i) { return this.track(this.state.decks[i].track).bpm * (1 + this.effPitch(i) / 100); }
+  rate(i) { return (1 + this.effPitch(i) / 100) * (1 + this.bend[i]); }
+  chanGain(i) {
+    const s = this.state, m = s.mix[i];
+    const x = i % 2 === 0 ? 1 - s.xf : s.xf;
+    return m.fader * (0.5 + m.trim) * Math.min(1, x * 2);
+  }
+  updDeck(i, patch) {
+    this.setState((s) => {
+      const decks = s.decks.slice();
+      decks[i] = Object.assign({}, decks[i], typeof patch === "function" ? patch(decks[i]) : patch);
+      return { decks };
+    });
+  }
+  updMix(i, patch) {
+    this.setState((s) => { const mix = s.mix.slice(); mix[i] = Object.assign({}, mix[i], patch); return { mix }; });
+  }
+  setT(i, v) {
+    const dur = this.track(this.state.decks[i].track).dur;
+    this.t[i] = Math.max(0, Math.min(dur - 0.05, v));
+  }
+  clamp(v) { return Math.max(0, Math.min(1, v)); }
+  say(msg) { this.setState({ toast: msg }); clearTimeout(this.toastT); this.toastT = setTimeout(() => this.setState({ toast: "" }), 5000); }
+  drag(e, move, up) {
+    const el = e.currentTarget, r = el.getBoundingClientRect();
+    const go = (ev) => move(r, ev);
+    go(e);
+    const end = (ev) => { window.removeEventListener("pointermove", go); window.removeEventListener("pointerup", end); if (up) up(ev); };
+    window.addEventListener("pointermove", go);
+    window.addEventListener("pointerup", end);
+  }
+
+  /* ─── MIDI learn: cada control se registra con un id y, en modo learn, un clic lo arma ─── */
+  armControl(id) { this.midi.arm(id); this.setState({ midiHint: "Mueve o pulsa un control de tu controladora para asignarlo a «" + (this.names[id] || id) + "»" }); }
+  learnable(id, name, handler) {
+    this.names[id] = name;
+    return (e) => { if (this.state.midi) { this.armControl(id); return; } handler && handler(e); };
+  }
+  btn(id, name, fire, release, lit) { this.names[id] = name; this.midi.register(id, { fire, release, lit }); return this.learnable(id, name, fire); }
+  knob(label, v, set, center, id, name) {
+    const down = (e) => { const y0 = e.clientY, v0 = v; this.drag(e, (r, ev) => set(this.clamp(v0 + (y0 - ev.clientY) / 140))); };
+    if (id) { this.names[id] = name || label; this.midi.register(id, { set }); }
+    return {
+      label,
+      rot: "position:absolute;inset:0;transform:rotate(" + Math.round(-135 + v * 270) + "deg)",
+      down: id ? this.learnable(id, name || label, down) : down,
+      reset: () => set(center == null ? 0.5 : center),
+    };
+  }
+  flashJog(i, txt) { this.jogLbl[i] = { txt, at: performance.now() }; }
+  jogText(i) {
+    const j = this.jogLbl[i];
+    return j && performance.now() - j.at < 700 ? j.txt : null;
+  }
+
+  /* ─── Ciclo de vida ─── */
+  componentDidMount() {
+    const prefs = ls.get(PREFS_KEY, {});
+    this.setState({ buf: prefs.buf || 256, rate: prefs.rate || 48000, masterSink: prefs.masterSink || "", phonesSink: prefs.phonesSink || "" });
+    this.midi.onChange = () => this.setState({ midiCount: this.midi.count(), midiDevs: this.midi.inputs.length, midiOk: this.midi.supported, midiHint: this.midi.armed ? this.state.midiHint : "" });
+    this.midi.onLearned = (id, key) => this.say("Asignado «" + (this.names[id] || id) + "» ← " + this.midi.describe(key));
+    this.midi.init();
+    this.eng.init({ latency: prefs.buf || 256, rate: prefs.rate || 48000, masterSink: prefs.masterSink || "", phonesSink: prefs.phonesSink || "" }).then(() => {
+      if (prefs.phonesSink) this.eng.setPhonesSink(prefs.phonesSink);
+      this.setState({ audioHint: this.eng.ctx.state !== "running" });
+    }).catch((e) => this.say("No se pudo iniciar el audio: " + e.message));
+    this.wake = () => { if (this.eng.ready) this.eng.resume().then(() => this.setState({ audioHint: this.eng.ctx.state !== "running" })); };
+    window.addEventListener("pointerdown", this.wake);
+    window.addEventListener("keydown", this.wake);
+
+    this.fileIn = Object.assign(document.createElement("input"), { type: "file", multiple: true, accept: "audio/*,.mp3,.wav,.flac,.ogg,.m4a,.aac,.aif,.aiff,.opus", hidden: true });
+    this.dirIn = Object.assign(document.createElement("input"), { type: "file", multiple: true, hidden: true });
+    this.dirIn.setAttribute("webkitdirectory", ""); this.dirIn.setAttribute("directory", "");
+    this.smpIn = Object.assign(document.createElement("input"), { type: "file", accept: "audio/*", hidden: true });
+    this.fileIn.onchange = () => { this.importFiles(Array.from(this.fileIn.files)); this.fileIn.value = ""; };
+    this.dirIn.onchange = () => { this.importFiles(Array.from(this.dirIn.files)); this.dirIn.value = ""; };
+    this.smpIn.onchange = async () => {
+      const f = this.smpIn.files[0], k = this.smpK; this.smpIn.value = "";
+      if (!f || k == null) return;
+      try { this.eng.setSample(k, await this.eng.decode(await f.arrayBuffer())); this.setState((s) => { const smpNames = s.smpNames.slice(); smpNames[k] = f.name.replace(/\.[^.]+$/, "").slice(0, 10); return { smpNames }; }); }
+      catch (e) { this.say("No se pudo cargar el sample"); }
+    };
+    this.mapIn = Object.assign(document.createElement("input"), { type: "file", accept: ".json,application/json", hidden: true });
+    this.mapIn.onchange = async () => { const f = this.mapIn.files[0]; this.mapIn.value = ""; if (!f) return; try { this.midi.importJSON(await f.text()); this.say("Mapeo importado: " + this.midi.count() + " asignaciones"); } catch (e) { this.say("No se pudo importar: " + e.message); } };
+    document.body.appendChild(this.mapIn);
+    document.body.appendChild(this.fileIn); document.body.appendChild(this.dirIn); document.body.appendChild(this.smpIn);
+
+    window.__mesaDJ = this; // útil para depurar desde la consola
+    this.last = performance.now();
+    this.frame = 0;
+    const loop = (now) => {
+      const dt = Math.min(0.1, (now - this.last) / 1000); this.last = now;
+      const s = this.state, E = this.eng;
+      if (E && E.ready) this.engineFrame(s, E, dt);
+      if (this.frame % 6 === 0) this.midi.feedback();
+      this.drawAll();
+      if (++this.frame % 2 === 0) this.setState({ tick: this.frame });
+      this.raf = requestAnimationFrame(loop);
+    };
+    this.raf = requestAnimationFrame(loop);
+  }
+  componentWillUnmount() {
+    cancelAnimationFrame(this.raf); clearTimeout(this.flashT);
+    window.removeEventListener("pointerdown", this.wake); window.removeEventListener("keydown", this.wake);
+  }
+  componentDidUpdate() {
+    if (!this.scrollSel) return;
+    this.scrollSel = false;
+    const box = document.querySelector("[data-rows]");
+    const row = box && box.querySelector('[data-sel="1"]');
+    if (!row) return;
+    const top = row.offsetTop - 34, bottom = row.offsetTop + row.offsetHeight;
+    if (top < box.scrollTop) box.scrollTop = top;
+    else if (bottom > box.scrollTop + box.clientHeight) box.scrollTop = bottom - box.clientHeight;
+  }
+
+  /* Sincroniza interfaz → motor de audio y motor → interfaz (posición, VU). */
+  engineFrame(s, E, dt) {
+    E.tick(dt);
+    for (let i = 0; i < 4; i++) {
+      const d = s.decks[i], tr = this.track(d.track), has = !!E.dk[i].buf;
+      E.setHold(i, this.hold[i]);
+      this.bend[i] = this.bendHold[i] || this.bend[i] * 0.9;
+      if (Math.abs(this.bend[i]) < 0.0005) this.bend[i] = 0;
+      if (d.play && has && !this.hold[i]) this.angle[i] = (this.angle[i] + dt * this.rate(i) * 200) % 360;
+      if (this.hold[i]) {
+        if (Math.abs(this.t[i] - this.lastEng[i]) > 1e-6) { E.scrub(i, this.t[i]); this.lastEng[i] = this.t[i]; }
+      } else {
+        if (Math.abs(this.t[i] - this.lastEng[i]) > 1e-6) E.seek(i, this.t[i]);
+        E.setPlaying(i, d.play && has);
+        const rt = this.rate(i);
+        E.setRate(i, rt);
+        const L = d.loop, sig = L.on + "," + L.in + "," + L.out;
+        if (sig !== this.loopSig[i]) { this.loopSig[i] = sig; E.setLoop(i, L.on, L.in, L.out); }
+        E.setPitchRatio(i, (d.keyLock ? 1 / rt : 1) * Math.pow(2, d.keyShift / 12));
+        const p = E.pos(i); this.t[i] = this.lastEng[i] = p;
+        if (d.play && has && p >= tr.dur - 0.06) { E.pause(i); E.dk[i].anchorPos = Math.max(0, tr.dur - 0.06); this.updDeck(i, { play: false }); }
+      }
+      this.vu[i] = Math.max(E.level(i), this.vu[i] * 0.88);
+    }
+    if (this.frame % 2 === 0) {
+      const m = { ch: s.mix.map((x) => ({ trim: x.trim, hi: x.hi, mid: x.mid, low: x.low, color: x.color, fader: x.fader, cue: x.cue })),
+        xf: s.xf, mvol: s.mvol, phMix: s.phMix, phVol: s.phVol, smpVol: s.smpVol, fx: s.fx, spb: 60 / this.bpmEff(s.master) };
+      const sig = JSON.stringify(m);
+      if (sig !== this.mixSig) { this.mixSig = sig; E.applyMix(m); }
+    }
+  }
+
+  /* ─── Dibujo ─── */
+  prep(c) {
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    const w = c.clientWidth, h = c.clientHeight;
+    if (!w || !h) return null;
+    if (c.width !== Math.round(w * dpr) || c.height !== Math.round(h * dpr)) { c.width = Math.round(w * dpr); c.height = Math.round(h * dpr); }
+    const g = c.getContext("2d");
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    return { g, w, h };
+  }
+  status(i) {
+    const s = this.state, d = s.decks[i], m = s.mix[i], out = [];
+    const j = this.jogText(i); if (j) out.push(j);
+    if (s.padFx[i]) out.push("PAD FX " + s.padFx[i].toUpperCase());
+    if (s.fx.on && (s.fx.ch === "Master" || s.fx.ch === String(i + 1))) out.push(s.fx.type.toUpperCase() + " " + beatsLabel(s.fx.beats));
+    if (Math.abs(m.color - 0.5) > 0.06) out.push((m.color < 0.5 ? "LPF " : "HPF ") + Math.round(Math.abs(m.color - 0.5) * 200) + "%");
+    if (d.loop.on) out.push("LOOP " + beatsLabel(d.loop.beats));
+    if (d.keyShift) out.push("KEY " + (d.keyShift > 0 ? "+" : "") + d.keyShift);
+    return out.join("  ·  ");
+  }
+  drawAll() {
+    document.querySelectorAll("canvas[data-lane]").forEach((c) => this.drawLane(c, +c.getAttribute("data-lane")));
+    document.querySelectorAll("canvas[data-ov]").forEach((c) => this.drawOverview(c, +c.getAttribute("data-ov")));
+  }
+  drawLane(c, i) {
+    const p = this.prep(c); if (!p) return;
+    const { g, w, h } = p, s = this.state, d = s.decks[i], tr = this.track(d.track), col = C[i];
+    const spb = 60 / tr.bpm, win = this.props.windowSeconds ?? 8, off = tr.firstBeat || 0;
+    const span = win * this.rate(i), tNow = this.t[i], t0 = tNow - span / 2;
+    const X = (t) => (t - t0) / span * w;
+    g.fillStyle = "#08090a"; g.fillRect(0, 0, w, h);
+    const has = d.track !== 0;
+    if (has && d.loop.on && d.loop.out > d.loop.in) {
+      g.fillStyle = col + "26"; g.fillRect(X(d.loop.in), 0, X(d.loop.out) - X(d.loop.in), h);
+      g.fillStyle = col; g.fillRect(X(d.loop.in), 0, 1.5, h); g.fillRect(X(d.loop.out), 0, 1.5, h);
+    }
+    if (has && (this.props.showBeatGrid ?? true)) {
+      for (let k = Math.ceil((t0 - off) / spb); k * spb + off < t0 + span; k++) {
+        const tb = k * spb + off; if (tb < 0) continue;
+        const x = Math.round(X(tb));
+        g.fillStyle = k % 4 === 0 ? "rgba(255,255,255,0.22)" : "rgba(255,255,255,0.07)";
+        g.fillRect(x, 0, 1, h);
+      }
+    }
+    const wv = this.wave(d.track), n = wv.amp.length, cy = h / 2, amp = h * 0.44;
+    const gain = 0.45 + 0.55 * Math.min(1, this.chanGain(i));
+    if (has) for (let x = 0; x < w; x += 2) {
+      const t = t0 + x / w * span;
+      if (t < 0 || t >= tr.dur) continue;
+      const idx = Math.min(n - 1, Math.floor(t * wv.rate));
+      const a = wv.amp[idx] * gain * amp, lo = wv.low[idx] * gain * amp;
+      g.fillStyle = col + "70"; g.fillRect(x, cy - a, 1.5, a * 2);
+      g.fillStyle = col; g.fillRect(x, cy - lo, 1.5, lo * 2);
+    }
+    g.fillStyle = "rgba(255,255,255,0.10)"; g.fillRect(0, Math.round(cy), w, 1);
+    d.mem.forEach((mt) => {
+      const x = X(mt); if (x < -8 || x > w + 8) return;
+      g.fillStyle = "#ff3b3b"; g.beginPath(); g.moveTo(x - 5, 0); g.lineTo(x + 5, 0); g.lineTo(x, 7); g.closePath(); g.fill();
+    });
+    d.hot.forEach((ht, k) => {
+      if (ht == null) return;
+      const x = X(ht); if (x < -14 || x > w + 14) return;
+      g.fillStyle = CUEC[k]; g.fillRect(Math.round(x), 0, 1.5, h);
+      g.fillRect(Math.round(x), h - 14, 13, 14);
+      g.fillStyle = "#0b0b0c"; g.font = '600 10px "Source Serif 4", serif'; g.fillText("ABCDEFGH"[k], Math.round(x) + 3, h - 3);
+    });
+    const cx = X(d.cuePt);
+    if (has && cx > -8 && cx < w + 8) { g.fillStyle = "#ff8a2e"; g.beginPath(); g.moveTo(cx - 5, h); g.lineTo(cx + 5, h); g.lineTo(cx, h - 7); g.closePath(); g.fill(); }
+    g.fillStyle = "#ffffff"; g.fillRect(Math.round(w / 2) - 1, 0, 2, h);
+    g.beginPath(); g.moveTo(w / 2 - 6, 0); g.lineTo(w / 2 + 6, 0); g.lineTo(w / 2, 8); g.closePath(); g.fill();
+    g.font = '600 12px "Source Serif 4", serif';
+    g.fillStyle = col; g.fillText(String(i + 1), 10, 16);
+    g.fillStyle = "rgba(236,235,232,0.85)";
+    g.fillText(d.loading ? "Cargando…" : has ? tr.title + "  ·  " + this.bpmEff(i).toFixed(1) + " BPM" : "Sin pista", 26, 16);
+    const st = this.status(i);
+    if (st) {
+      g.font = '600 11px "Source Serif 4", serif';
+      const tw = g.measureText(st).width;
+      g.fillStyle = "rgba(0,0,0,0.6)"; g.fillRect(w - tw - 20, 4, tw + 12, 18);
+      g.fillStyle = col; g.fillText(st, w - tw - 14, 17);
+    }
+  }
+  drawOverview(c, i) {
+    const p = this.prep(c); if (!p) return;
+    const { g, w, h } = p, d = this.state.decks[i], tr = this.track(d.track), col = C[i];
+    const wv = this.wave(d.track), n = wv.amp.length, tNow = this.t[i];
+    g.fillStyle = "#0d0e10"; g.fillRect(0, 0, w, h);
+    const has = d.track !== 0;
+    const X = (t) => t / tr.dur * w;
+    if (has) {
+      if (d.loop.on && d.loop.out > d.loop.in) { g.fillStyle = col + "40"; g.fillRect(X(d.loop.in), 0, Math.max(2, X(d.loop.out) - X(d.loop.in)), h); }
+      const per = Math.max(1, Math.floor(n / w * 2)), cy = h / 2 + 2;
+      for (let x = 0; x < w; x += 2) {
+        const i0 = Math.floor(x / w * n);
+        let mx = 0; for (let k = i0; k < Math.min(n, i0 + per); k++) mx = Math.max(mx, wv.amp[k]);
+        const a = mx * (h * 0.4);
+        g.fillStyle = (x / w * tr.dur) < tNow ? "rgba(236,235,232,0.32)" : col;
+        g.fillRect(x, cy - a, 1.5, a * 2);
+      }
+      d.mem.forEach((mt) => { const x = X(mt); g.fillStyle = "#ff3b3b"; g.beginPath(); g.moveTo(x - 4, 0); g.lineTo(x + 4, 0); g.lineTo(x, 6); g.closePath(); g.fill(); });
+      d.hot.forEach((ht, k) => {
+        if (ht == null) return;
+        const x = X(ht); g.fillStyle = CUEC[k]; g.fillRect(x, h - 11, 10, 11);
+        g.fillStyle = "#0b0b0c"; g.font = '600 9px "Source Serif 4", serif'; g.fillText("ABCDEFGH"[k], x + 2, h - 2);
+      });
+      g.fillStyle = "#ffffff"; g.fillRect(Math.round(X(tNow)) - 1, 0, 2, h);
+    }
+    g.font = '600 10px "Source Serif 4", serif'; g.fillStyle = col; g.fillText(String(i + 1), 4, 11);
+  }
+
+  /* ─── Plato ─── */
+  jogDown(i) {
+    return (e) => {
+      const r = e.currentTarget.getBoundingClientRect(), cxp = r.left + r.width / 2, cyp = r.top + r.height / 2;
+      const d = this.state.decks[i];
+      const dist = Math.hypot(e.clientX - cxp, e.clientY - cyp) / (r.width / 2);
+      const mode = dist < 0.66 && d.vinyl ? "scratch" : d.play ? "nudge" : "search";
+      let prev = Math.atan2(e.clientY - cyp, e.clientX - cxp);
+      if (mode === "scratch") { this.hold[i] = true; this.flashJog(i, "SCRATCH"); }
+      const move = (ev) => {
+        const a = Math.atan2(ev.clientY - cyp, ev.clientX - cxp);
+        let dd = (a - prev) * 180 / Math.PI; prev = a;
+        if (dd > 180) dd -= 360; if (dd < -180) dd += 360;
+        this.angle[i] = (this.angle[i] + dd + 360) % 360;
+        if (mode === "scratch") { this.setT(i, this.t[i] + dd / 200); this.flashJog(i, dd >= 0 ? "SCRATCH ▶" : "SCRATCH ◀"); }
+        else if (mode === "search") { this.setT(i, this.t[i] + dd / 200 * 6); this.flashJog(i, dd >= 0 ? "SEARCH ▶▶" : "SEARCH ◀◀"); }
+        else { this.bend[i] = Math.max(-0.1, Math.min(0.1, dd * 0.012)); this.flashJog(i, dd >= 0 ? "NUDGE +" : "NUDGE −"); }
+      };
+      const up = () => { this.hold[i] = false; window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); };
+      window.addEventListener("pointermove", move);
+      window.addEventListener("pointerup", up);
+    };
+  }
+  jogDelta(i, n) {
+    const d = this.state.decks[i];
+    if (this.hold[i]) { this.setT(i, this.t[i] + n * 0.0022); this.flashJog(i, n >= 0 ? "SCRATCH ▶" : "SCRATCH ◀"); }
+    else if (d.play) { this.bend[i] = Math.max(-0.1, Math.min(0.1, this.bend[i] + n * 0.004)); this.flashJog(i, n >= 0 ? "NUDGE +" : "NUDGE −"); }
+    else { this.setT(i, this.t[i] + n * 0.02); this.flashJog(i, n >= 0 ? "SEARCH ▶▶" : "SEARCH ◀◀"); }
+    this.angle[i] = (this.angle[i] + n * 2 + 360) % 360;
+  }
+
+  /* ─── Biblioteca ─── */
+  async importFiles(files) {
+    files = files.filter((f) => DJLibrary.isAudio(f));
+    if (!files.length) { this.say("No hay archivos de audio en la selección."); return; }
+    await this.eng.resume();
+    let n = 0, bad = 0;
+    const added = [];
+    for (const f of files) {
+      n++;
+      this.setState({ importing: "Importando " + n + "/" + files.length + " · " + f.name });
+      const dup = LIB.find((t) => t.name === f.name && t.size === f.size);
+      if (dup) { added.push(dup); continue; }
+      try {
+        const meta = await DJLibrary.importFile(f, this.eng, DJAnalysis);
+        LIB.push(meta); syncLib(); added.push(meta);
+        this.setState((s) => ({ libVer: s.libVer + 1 }));
+      } catch (e) { console.warn(f.name, e); bad++; }
+    }
+    this.setState({ importing: "" });
+    this.say("Importadas " + (files.length - bad) + " pistas" + (bad ? " · " + bad + " no se pudieron leer" : ""));
+    return added;
+  }
+  async dropOnDeck(di, dt) {
+    const added = await this.importFiles(await this.collectDropped(dt));
+    if (added && added.length) this.loadTrack(di, added[0]);
+  }
+  async collectDropped(dt) {
+    const out = [];
+    const walk = async (entry) => {
+      if (entry.isFile) out.push(await new Promise((res) => entry.file(res)));
+      else if (entry.isDirectory) {
+        const rd = entry.createReader();
+        for (;;) {
+          const batch = await new Promise((res) => rd.readEntries(res));
+          if (!batch.length) break;
+          for (const en of batch) await walk(en);
+        }
+      }
+    };
+    const items = dt.items ? Array.from(dt.items).map((it) => it.webkitGetAsEntry && it.webkitGetAsEntry()) : [];
+    if (items.length && items.every(Boolean)) { for (const en of items) await walk(en); return out; }
+    return Array.from(dt.files);
+  }
+  saveCues(i) {
+    clearTimeout(this.cueTimers[i]);
+    this.cueTimers[i] = setTimeout(() => {
+      const d = this.state.decks[i], tr = LIBMAP.get(d.track); if (!tr) return;
+      tr.cues = { hot: d.hot.slice(), mem: d.mem.slice(), cuePt: d.cuePt };
+      DJLibrary.put(tr);
+    }, 150);
+  }
+  async loadTrack(di, tr) {
+    if (!tr) return;
+    const E = this.eng;
+    if (!E.ready) { this.say("El audio todavía se está iniciando…"); return; }
+    await E.resume();
+    this.updDeck(di, { loading: true });
+    try {
+      const rec = DJLibrary.file(tr.id);
+      if (!rec) throw new Error("archivo no encontrado en la biblioteca");
+      const buf = await E.decode(await rec.arrayBuffer());
+      if (!this.waves[tr.id]) this.waves[tr.id] = DJAnalysis.waveform(buf);
+      E.load(di, buf);
+      this.t[di] = 0; this.lastEng[di] = 0; this.loopSig[di] = "";
+      const cu = tr.cues || {};
+      this.updDeck(di, { track: tr.id, loading: false, play: false, cuePt: cu.cuePt || 0, hot: (cu.hot || [null, null, null, null, null, null, null, null]).slice(), mem: (cu.mem || []).slice(), loop: { on: false, in: null, out: null, beats: 4 }, keyShift: 0, pitch: 0 });
+    } catch (e) {
+      this.updDeck(di, { loading: false });
+      this.say("No se pudo cargar «" + tr.title + "»: " + e.message);
+    }
+  }
+  alignPhase(i) {
+    const s = this.state, m = s.master;
+    if (m === i || !this.hasTrack(i) || !this.hasTrack(m) || !s.decks[m].play) return;
+    const tm = this.track(s.decks[m].track), td = this.track(s.decks[i].track);
+    const ph = (t, tr) => (((t - tr.firstBeat) * tr.bpm / 60) % 1 + 1) % 1;
+    let delta = ph(this.t[m], tm) - ph(this.t[i], td);
+    if (delta > 0.5) delta -= 1; if (delta < -0.5) delta += 1;
+    this.setT(i, this.t[i] + delta * 60 / td.bpm);
+  }
+
+  fireSample(k) {
+    if (this.eng && this.eng.ready) { this.eng.resume(); this.eng.playSample(k); }
+    this.setState({ smpFlash: k });
+    clearTimeout(this.flashT);
+    this.flashT = setTimeout(() => this.setState({ smpFlash: -1 }), 350);
+  }
+  padStyle(state, col) {
+    const base = "height:36px;border-radius:5px;border:1px solid #000;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;cursor:pointer;font-family:var(--font-body);touch-action:none;user-select:none;padding:0 4px;min-width:0;";
+    if (state === "active") return base + "background:" + col + ";color:#0b0b0c;box-shadow:0 0 16px " + col + "aa, inset 0 1px 0 rgba(255,255,255,0.4);";
+    if (state === "armed") return base + "background:linear-gradient(180deg," + col + "38," + col + "1c);color:" + col + ";box-shadow:inset 0 0 0 1px " + col + "aa, 0 1px 2px rgba(0,0,0,0.6);";
+    return base + "background:linear-gradient(180deg,#26272b,#1b1c1f);color:rgba(236,235,232,0.4);box-shadow:inset 0 1px 0 rgba(255,255,255,0.06);";
+  }
+  pads(i) {
+    const s = this.state, d = s.decks[i], tr = this.track(d.track), spb = 60 / tr.bpm, off = tr.firstBeat || 0;
+    const mode = MODES.find((m) => m.id === d.padMode);
+    const held = (k) => s.held === i + "-" + k;
+    const up = () => {
+      const name = this.padHeld[i];
+      if (name) { this.padHeld[i] = null; this.eng.padFx(i, name, false, 60 / this.bpmEff(i)); }
+      if (this.state.held) this.setState((st) => { const padFx = st.padFx.slice(); padFx[i] = null; return { held: "", padFx }; });
+    };
+    return [0, 1, 2, 3, 4, 5, 6, 7].map((k) => {
+      const id = "d" + i + ".pad" + k, nm = "Deck " + (i + 1) + " · Pad " + (k + 1);
+      const base = { up, ctx: (e) => e.preventDefault() };
+      const press = (fn) => { const f = () => { this.setState({ held: i + "-" + k }); fn(); }; this.midi.register(id, { fire: f, release: up, lit: () => (this.state.decks[i].padMode === "hot" ? this.state.decks[i].hot[k] != null : this.state.held === i + "-" + k) }); this.names[id] = nm; return this.learnable(id, nm, f); };
+      const wrap = (fn) => { const h = press(fn); return (e) => { e.preventDefault(); h(e); }; };
+      if (d.padMode === "hot") {
+        const has = d.hot[k] != null;
+        return Object.assign(base, {
+          label: "ABCDEFGH"[k], sub: has ? mmss(d.hot[k]) : "vacío",
+          style: this.padStyle(held(k) ? "active" : has ? "armed" : "empty", CUEC[k]),
+          down: wrap(() => {
+            if (!this.hasTrack(i)) return;
+            if (has) { this.setT(i, d.hot[k]); this.flashJog(i, "HOT CUE " + "ABCDEFGH"[k]); }
+            else { this.updDeck(i, (dd) => { const hot = dd.hot.slice(); hot[k] = this.t[i]; return { hot }; }); this.saveCues(i); }
+          }),
+          ctx: (e) => { e.preventDefault(); this.updDeck(i, (dd) => { const hot = dd.hot.slice(); hot[k] = null; return { hot }; }); this.saveCues(i); },
+        });
+      }
+      if (d.padMode === "fx") return Object.assign(base, {
+        label: PADFX[k], sub: "mantener", style: this.padStyle(held(k) ? "active" : "armed", mode.col),
+        down: wrap(() => { this.padHeld[i] = PADFX[k]; this.eng.padFx(i, PADFX[k], true, spb / (1 + this.effPitch(i) / 100)); this.setState((st) => { const padFx = st.padFx.slice(); padFx[i] = PADFX[k]; return { padFx }; }); }),
+      });
+      if (d.padMode === "jump") {
+        const v = JUMPS[k];
+        return Object.assign(base, {
+          label: (v > 0 ? "+" : "−") + Math.abs(v), sub: "beats", style: this.padStyle(held(k) ? "active" : "armed", mode.col),
+          down: wrap(() => { this.setT(i, this.t[i] + v * spb); this.flashJog(i, "JUMP " + (v > 0 ? "+" : "−") + Math.abs(v)); }),
+        });
+      }
+      if (d.padMode === "smp") return Object.assign(base, {
+        label: s.smpNames[k], sub: "slot " + (k + 1), style: this.padStyle(held(k) || s.smpFlash === k ? "active" : "armed", mode.col),
+        down: wrap(() => this.fireSample(k)),
+      });
+      if (d.padMode === "bloop") {
+        const v = BLOOPS[k], on = d.loop.on && d.loop.beats === v;
+        return Object.assign(base, {
+          label: beatsLabel(v), sub: "beats", style: this.padStyle(on || held(k) ? "active" : "armed", mode.col),
+          down: wrap(() => {
+            if (!this.hasTrack(i)) return;
+            if (on) return this.updDeck(i, (dd) => ({ loop: Object.assign({}, dd.loop, { on: false }) }));
+            const st = Math.floor((this.t[i] - off) / spb) * spb + off;
+            this.updDeck(i, { loop: { on: true, in: st, out: st + v * spb, beats: v } });
+          }),
+        });
+      }
+      const v = KEYS[k];
+      return Object.assign(base, {
+        label: v === 0 ? "0" : (v > 0 ? "+" : "−") + Math.abs(v), sub: keyShifted(tr.key, v),
+        style: this.padStyle(d.keyShift === v || held(k) ? "active" : "armed", mode.col),
+        down: wrap(() => this.updDeck(i, { keyShift: v })),
+      });
+    });
+  }
+  deckVals(i, side) {
+    const s = this.state, d = s.decks[i], tr = this.track(d.track), col = C[i], t = this.t[i];
+    const spb = 60 / tr.bpm, off = tr.firstBeat || 0, has = d.track !== 0;
+    const ep = this.effPitch(i), jt = this.jogText(i), L = d.loop;
+    const plain = hw(false, col, "");
+    const dn = "Deck " + (i + 1) + " · ";
+    const badge = (label, on) => ({ label, style: LBL + "padding:3px 7px;border-radius:3px;font-size:9.5px;" + (on ? "color:" + col + ";box-shadow:inset 0 0 0 1px " + col + ";" : "color:rgba(236,235,232,0.35);box-shadow:inset 0 0 0 1px rgba(255,255,255,0.12);") });
+    const pp = Math.max(0, Math.min(1, (d.pitch / d.range + 1) / 2));
+    const setPitch = (v) => this.updDeck(i, { pitch: Math.round((v * 2 - 1) * d.range * 100) / 100 });
+    this.midi.register("d" + i + ".pitch", { set: setPitch }); this.names["d" + i + ".pitch"] = dn + "Pitch";
+    this.midi.register("d" + i + ".jog", { delta: (n) => this.jogDelta(i, n) }); this.names["d" + i + ".jog"] = dn + "Plato";
+    const toggle = () => { if (has) this.updDeck(i, { play: !d.play }); };
+    this.btn("d" + i + ".jogtouch", dn + "Plato (toque)", () => { if (this.state.decks[i].vinyl && this.hasTrack(i)) { this.hold[i] = true; this.flashJog(i, "SCRATCH"); } }, () => { this.hold[i] = false; });
+    this.btn("d" + i + ".bendm", dn + "Pitch bend −", () => { this.bendHold[i] = -0.06; }, () => { this.bendHold[i] = 0; });
+    this.btn("d" + i + ".bendp", dn + "Pitch bend +", () => { this.bendHold[i] = 0.06; }, () => { this.bendHold[i] = 0; });
+    const cue = () => {
+      if (!has) return;
+      const cur = this.state.decks[i];
+      if (cur.play) { this.t[i] = cur.cuePt; this.updDeck(i, { play: false }); }
+      else if (Math.abs(this.t[i] - cur.cuePt) < 0.05) { this.cuePrev[i] = true; this.updDeck(i, { play: true }); } // previsualiza mientras se mantiene
+      else { this.updDeck(i, { cuePt: this.t[i] }); this.saveCues(i); }
+    };
+    const cueUp = () => { if (!this.cuePrev[i]) return; this.cuePrev[i] = false; this.t[i] = this.state.decks[i].cuePt; this.updDeck(i, { play: false }); };
+    const loopIn = () => this.updDeck(i, { loop: { on: false, in: this.t[i], out: null, beats: L.beats } });
+    const loopOut = () => {
+      if (L.in == null || this.t[i] <= L.in) return;
+      const out = this.t[i];
+      this.updDeck(i, { loop: { on: true, in: L.in, out, beats: Math.max(0.03125, Math.round((out - L.in) / spb * 4) / 4) } });
+    };
+    const loopExit = () => {
+      if (L.on) this.updDeck(i, { loop: Object.assign({}, L, { on: false }) });
+      else if (L.in != null && L.out != null) { this.updDeck(i, { loop: Object.assign({}, L, { on: true }) }); this.t[i] = L.in; }
+    };
+    const loopHalf = () => { const b = Math.max(0.03125, L.beats / 2); this.updDeck(i, { loop: Object.assign({}, L, { beats: b, out: L.on ? L.in + b * spb : L.out }) }); };
+    const loopDouble = () => { const b = Math.min(32, L.beats * 2); this.updDeck(i, { loop: Object.assign({}, L, { beats: b, out: L.on ? L.in + b * spb : L.out }) }); };
+    const loopAuto = () => {
+      if (!has) return;
+      if (L.on) return this.updDeck(i, { loop: Object.assign({}, L, { on: false }) });
+      const st = Math.floor((this.t[i] - off) / spb) * spb + off;
+      this.updDeck(i, { loop: { on: true, in: st, out: st + L.beats * spb, beats: L.beats } });
+    };
+    const memAdd = () => { if (!has) return; this.updDeck(i, (dd) => ({ mem: dd.mem.concat([this.t[i]]).sort((a, b) => a - b).slice(-10) })); this.saveCues(i); };
+    const memPrev = () => { const p = d.mem.filter((m) => m < this.t[i] - 0.5).pop(); if (p != null) this.t[i] = p; };
+    const memNext = () => { const n = d.mem.find((m) => m > this.t[i] + 0.1); if (n != null) this.t[i] = n; };
+    const toggles = [
+      { label: "Sync", on: d.sync, id: "sync", fn: () => {
+        const on = !d.sync;
+        if (on) { this.updDeck(i, { sync: true }); this.alignPhase(i); }
+        else this.updDeck(i, { sync: false, pitch: Math.max(-d.range, Math.min(d.range, Math.round(this.effPitch(i) * 100) / 100)) }); // conserva el tempo actual
+      } },
+      { label: "Master", on: s.master === i, id: "master", fn: () => this.setState({ master: i }) },
+      { label: "Key lock", on: d.keyLock, id: "keylock", fn: () => this.updDeck(i, { keyLock: !d.keyLock }) },
+      { label: "Vinyl", on: d.vinyl, id: "vinyl", fn: () => this.updDeck(i, { vinyl: !d.vinyl }) },
+    ];
+    return {
+      onDragOver: (e) => e.preventDefault(),
+      onDrop: (e) => { e.preventDefault(); e.stopPropagation(); this.dropOnDeck(i, e.dataTransfer); },
+      place: side === 0 ? "grid-column:1;grid-row:1;min-width:0" : "grid-column:3;grid-row:1;min-width:0",
+      num: String(i + 1),
+      numStyle: "font-family:var(--font-heading);font-weight:600;font-size:40px;line-height:0.85;color:" + col + ";text-shadow:0 0 18px " + col + "55",
+      layers: [side, side + 2].map((di) => ({ label: String(di + 1), style: hw(di === i, C[di], "height:22px;padding:0 8px;font-size:10px"), pick: () => this.setState((st) => { const layer = st.layer.slice(); layer[side] = di; return { layer }; }) })),
+      title: d.loading ? "Cargando…" : tr.title, artist: tr.artist,
+      badges: [badge("Sync", d.sync), badge("Master", s.master === i), badge("Key lock", d.keyLock), badge(L.on ? "Loop " + beatsLabel(L.beats) : "Loop", L.on)],
+      bpm: has ? this.bpmEff(i).toFixed(2) : "—",
+      pitch: (ep >= 0 ? "+" : "") + ep.toFixed(2) + "%",
+      key: has ? keyShifted(tr.key, d.keyShift) + (d.keyLock || Math.abs(ep) < 0.5 ? "" : " ~") : "—",
+      elapsed: mmss(t), remaining: mmss(tr.dur - t),
+      ring: "position:absolute;inset:0;border-radius:50%;background:conic-gradient(" + col + " 0% " + (t / tr.dur * 100).toFixed(2) + "%, rgba(255,255,255,0.08) " + (t / tr.dur * 100).toFixed(2) + "% 100%);mask:radial-gradient(closest-side, transparent 93%, #000 94%);-webkit-mask:radial-gradient(closest-side, transparent 93%, #000 94%)",
+      platter: "position:absolute;inset:28px;border-radius:50%;background:repeating-radial-gradient(circle,#0c0c0d 0 1.5px,#1b1b1d 1.5px 3px);box-shadow:inset 0 0 0 2px #000, 0 0 0 1px rgba(255,255,255,0.08);transform:rotate(" + this.angle[i].toFixed(1) + "deg)",
+      marker: "position:absolute;left:50%;top:4px;width:4px;height:32px;border-radius:2px;background:" + col + ";transform:translateX(-50%);box-shadow:0 0 8px " + col,
+      jogMode: d.vinyl ? "Vinyl" : "CDJ",
+      jogInfo: jt || (d.play ? "Play" : "Pausa"),
+      jogInfoStyle: "font-size:" + (jt ? 10 : 13) + "px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:" + (jt ? col : "#ecebe8") + ";text-align:center;line-height:1.1;padding:0 4px",
+      jogDown: this.learnable("d" + i + ".jog", dn + "Plato", this.jogDown(i)),
+      cue: this.btn("d" + i + ".cue", dn + "Cue", cue, cueUp, () => !this.state.decks[i].play && Math.abs(this.t[i] - this.state.decks[i].cuePt) < 0.05),
+      cueUp,
+      toggle: this.btn("d" + i + ".play", dn + "Play / Pausa", toggle, null, () => this.state.decks[i].play),
+      cueStyle: round(!d.play && Math.abs(t - d.cuePt) < 0.05, "#ff8a2e"),
+      playStyle: round(d.play, "#5fe08a"),
+      playLabel: d.play ? "Pausa" : "Play",
+      toggles: toggles.map((x) => ({ label: x.label, style: hw(x.on, col, ""), click: this.btn("d" + i + "." + x.id, dn + x.label, x.fn, null, () => x.on) })),
+      loopInfo: L.on ? beatsLabel(L.beats) + " beats" : L.in != null ? "In " + mmss(L.in) : "—",
+      loopIn: this.btn("d" + i + ".loopin", dn + "Loop In", loopIn, null, () => L.in != null && !L.on),
+      loopOut: this.btn("d" + i + ".loopout", dn + "Loop Out", loopOut, null, () => L.on),
+      loopExit: this.btn("d" + i + ".loopexit", dn + "Loop Exit / Reloop", loopExit),
+      loopExitLabel: L.on ? "Exit" : "Reloop",
+      loopInStyle: hw(L.in != null && !L.on, col, ""),
+      loopOutStyle: hw(L.on, col, ""),
+      loopExitStyle: plain,
+      loopHalf: this.btn("d" + i + ".loophalf", dn + "Loop ½", loopHalf),
+      loopDouble: this.btn("d" + i + ".loopdouble", dn + "Loop ×2", loopDouble),
+      loopAuto: this.btn("d" + i + ".loopauto", dn + "Auto loop", loopAuto, null, () => L.on),
+      loopAutoStyle: hw(L.on, col, ""),
+      loopBeats: beatsLabel(L.beats),
+      plainBtn: plain,
+      memCount: d.mem.length ? d.mem.length + " guardados" : "ninguno",
+      memAdd: this.btn("d" + i + ".mem", dn + "Memory cue", memAdd),
+      memPrev: this.btn("d" + i + ".memprev", dn + "Memory ◀", memPrev),
+      memNext: this.btn("d" + i + ".memnext", dn + "Memory ▶", memNext),
+      memStyle: hw(false, "#ff3b3b", "color:#ff6b6b"),
+      rangeLabel: d.range >= 100 ? "Wide" : "±" + d.range,
+      rangeStyle: hw(false, col, "height:22px;padding:0 4px;font-size:9.5px;width:40px"),
+      rangeClick: this.btn("d" + i + ".range", dn + "Rango de pitch", () => { const R = [6, 8, 16, 100]; this.updDeck(i, { range: R[(R.indexOf(this.state.decks[i].range) + 1) % R.length] }); }),
+      pitchHandle: "position:absolute;left:-1px;right:-1px;height:22px;border-radius:3px;background:linear-gradient(180deg,#5b5d62,#2a2b2f);box-shadow:0 3px 6px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.2);bottom:calc(" + (pp * 100).toFixed(1) + "% - 11px)" + (d.sync && s.master !== i ? ";opacity:0.5" : ""),
+      pitchDown: this.learnable("d" + i + ".pitch", dn + "Pitch", (e) => this.drag(e, (r, ev) => setPitch(1 - this.clamp((ev.clientY - r.top) / r.height)))),
+      pitchReset: () => this.updDeck(i, { pitch: 0 }),
+      tempoVal: (d.pitch >= 0 ? "+" : "") + d.pitch.toFixed(1) + "%",
+      modes: MODES.map((m) => ({ label: m.label, pick: this.btn("d" + i + ".mode." + m.id, dn + "Modo pads: " + m.label, () => this.updDeck(i, { padMode: m.id }), null, () => this.state.decks[i].padMode === m.id), style: hw(d.padMode === m.id, m.col, "flex:1 1 0;height:24px;font-size:9px;padding:0 3px;letter-spacing:0.04em") })),
+      pads: this.pads(i),
+    };
+  }
+
+  /* ─── Preferencias de audio ─── */
+  async applyAudioCfg(patch) {
+    if (this.state.rec.on) { this.say("Detén la grabación antes de cambiar la configuración de audio."); return; }
+    this.setState(patch);
+    const s = Object.assign({}, this.state, patch);
+    ls.set(PREFS_KEY, { buf: s.buf, rate: s.rate, masterSink: s.masterSink, phonesSink: s.phonesSink });
+    if ("buf" in patch || "rate" in patch) {
+      try { await this.eng.rebuild({ latency: s.buf, rate: s.rate }); this.mixSig = ""; this.loopSig = ["", "", "", ""]; }
+      catch (e) { this.say("No se pudo reconfigurar el audio: " + e.message); }
+    }
+    if ("masterSink" in patch) await this.eng.setMasterSink(s.masterSink);
+    if ("phonesSink" in patch) await this.eng.setPhonesSink(s.phonesSink);
+  }
+  async detectDevices() {
+    try { const st = await navigator.mediaDevices.getUserMedia({ audio: true }); st.getTracks().forEach((t) => t.stop()); } catch (e) { /* sin permiso: se listan sin nombre */ }
+    try {
+      const all = await navigator.mediaDevices.enumerateDevices();
+      this.setState({ devOut: all.filter((d) => d.kind === "audiooutput").map((d, k) => ({ id: d.deviceId, label: d.label || "Salida " + (k + 1) })) });
+    } catch (e) { this.say("No se pudieron listar los dispositivos de audio."); }
+  }
+
+  renderVals() {
+    const s = this.state, E = this.eng;
+    const sideDecks = s.layer;
+    const laneDecks = s.view === 4 ? [0, 1, 2, 3] : sideDecks.slice();
+    const chanDecks = s.view === 4 ? [2, 0, 1, 3] : sideDecks.slice();
+    const laneH = Math.round((this.props.laneH ?? 52) * (s.view === 4 ? 0.62 : 1));
+    const lanes = laneDecks.map((i) => ({
+      deck: i,
+      down: (e) => {
+        const x0 = e.clientX, t0 = this.t[i], w = e.currentTarget.clientWidth, span = (this.props.windowSeconds ?? 8) * this.rate(i);
+        this.hold[i] = true;
+        this.drag(e, (r, ev) => { this.setT(i, t0 - (ev.clientX - x0) / w * span); this.flashJog(i, "SCRUB"); }, () => { this.hold[i] = false; });
+      },
+      seek: (e) => this.drag(e, (r, ev) => this.setT(i, this.clamp((ev.clientX - r.left) / r.width) * this.track(s.decks[i].track).dur)),
+    }));
+    const vuSegs = (i) => {
+      const db = this.vu[i] > 1e-4 ? 20 * Math.log10(this.vu[i]) : -90;
+      const L = Math.max(0, Math.min(1, (db + 40) / 40));
+      const out = [];
+      for (let k = 13; k >= 0; k--) {
+        const lit = L * 14 > k, c = k >= 12 ? "#ff3b3b" : k >= 9 ? "#f2c200" : C[i];
+        out.push("flex:1 1 0;border-radius:1px;background:" + (lit ? c : "rgba(255,255,255,0.07)") + (lit ? ";box-shadow:0 0 4px " + c : ""));
+      }
+      return out;
+    };
+    const channels = chanDecks.map((i) => {
+      const m = s.mix[i], cn = "CH " + (i + 1) + " · ";
+      const setFader = (v) => this.updMix(i, { fader: v });
+      this.midi.register("c" + i + ".fader", { set: setFader }); this.names["c" + i + ".fader"] = cn + "Fader";
+      return {
+        label: "CH " + (i + 1),
+        labelStyle: "font-size:11px;font-weight:600;letter-spacing:0.12em;text-transform:uppercase;color:" + C[i],
+        knobs: [["trim", "Trim"], ["hi", "Agudos"], ["mid", "Medios"], ["low", "Graves"], ["color", "Color FX"]].map(([key, label]) => this.knob(label, m[key], (v) => this.updMix(i, { [key]: v }), 0.5, "c" + i + "." + key, cn + label)),
+        cueClick: this.btn("c" + i + ".cue", cn + "Cue (auriculares)", () => this.updMix(i, { cue: !this.state.mix[i].cue }), null, () => this.state.mix[i].cue),
+        cueStyle: hw(m.cue, "#ff8a2e", "width:100%;height:24px;font-size:9.5px;padding:0 2px"),
+        vu: vuSegs(i),
+        handle: "position:absolute;left:0;right:0;height:22px;border-radius:3px;background:linear-gradient(180deg,#5b5d62,#2a2b2f);box-shadow:0 3px 6px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.2);bottom:calc(" + (m.fader * 100).toFixed(1) + "% - 11px)",
+        down: this.learnable("c" + i + ".fader", cn + "Fader", (e) => this.drag(e, (r, ev) => setFader(this.clamp(1 - (ev.clientY - r.top) / r.height)))),
+        reset: () => setFader(0.8),
+        xf: i % 2 === 0 ? "A" : "B",
+      };
+    });
+
+    const q = s.query.trim().toLowerCase();
+    const list = LIB.filter((t) => !q || (t.title + " " + t.artist + " " + t.key).toLowerCase().includes(q));
+    const sel = Math.min(s.sel, Math.max(0, list.length - 1));
+    const visDecks = s.view === 4 ? [0, 1, 2, 3] : sideDecks;
+    const moveSel = (dir) => { this.scrollSel = true; this.setState({ sel: Math.max(0, Math.min(list.length - 1, sel + dir)) }); };
+    const press = () => {};
+    const touch = () => this.setState((st) => ({ libVer: st.libVer + 1 }));
+    const rec = s.rec;
+    const loadSide = (side) => () => this.loadTrack(sideDecks[side], list[sel]);
+    const startRec = () => { this.eng.startRec(); const d = new Date(); this.setState({ rec: { on: true, start: Date.now(), file: "Sesion_" + dayKey(d) + "_" + pad2(d.getHours()) + pad2(d.getMinutes()) + ".wav" } }); };
+    const stopRec = () => {
+      const blob = this.eng.stopRec(), a = document.createElement("a");
+      a.href = URL.createObjectURL(blob); a.download = rec.file; document.body.appendChild(a); a.click();
+      setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 4000);
+      this.setState({ rec: Object.assign({}, rec, { on: false }) });
+    };
+    const recToggle = this.btn("rec", "Grabar", () => { if (!this.eng.ready) return; this.eng.resume(); this.state.rec.on ? stopRec() : startRec(); }, null, () => this.state.rec.on);
+    const setNum = (n) => "Deck " + (n + 1);
+    const selTrack = list[sel];
+
+    return {
+      masterBpm: this.hasTrack(s.master) ? this.bpmEff(s.master).toFixed(1) : "—", masterNum: s.master + 1,
+      viewOpts: [2, 4].map((v) => ({ label: v + " D", pick: () => this.setState({ view: v }), style: hw(s.view === v, "#ecebe8", "height:26px") })),
+      panelOpts: [["fx", "Efectos"], ["sampler", "Sampler"], ["rec", "Grabación"]].map(([k, label]) => ({ label, pick: () => this.setState((st) => ({ panels: Object.assign({}, st.panels, { [k]: !st.panels[k] }) })), style: hw(s.panels[k], "#22b4e4", "height:26px") })),
+      recToggle,
+      recStyle: hw(rec.on, "#ff3b3b", "height:26px;font-variant-numeric:tabular-nums" + (rec.on ? "" : ";color:#ff6b6b")),
+      recBigStyle: round(rec.on, "#ff3b3b"),
+      recTime: rec.on ? mmss((Date.now() - rec.start) / 1000) : "0:00",
+      recState: rec.on ? "Grabando" : rec.file ? "Detenido · descargado" : "Preparado",
+      recFile: rec.file || "La sesión se guarda como WAV de 24 bits",
+      recLevel: "height:100%;background:linear-gradient(90deg,#5fe08a,#f2c200 75%,#ff3b3b);width:" + (rec.on && E.ready ? Math.round(Math.min(1, E.masterLevel()) * 100) : 0) + "%",
+      midi: s.midi, midiCount: s.midiCount,
+      midiHint: !s.midiOk ? "Tu navegador no admite Web MIDI (usa Chrome o Edge)." : s.midiHint || (s.midiDevs ? s.midiDevs + " controladora(s) conectada(s). Pulsa un control en pantalla y después mueve el de tu controladora." : "No se detecta ninguna controladora MIDI."),
+      midiToggle: () => { this.midi.armed = null; this.setState({ midi: !s.midi, midiHint: "" }); },
+      midiClear: () => { this.midi.clear(); this.say("Asignaciones borradas"); },
+      midiRows: Object.keys(this.midi.map).sort().map((k) => ({ msg: this.midi.describe(k), name: this.names[this.midi.map[k]] || this.midi.map[k], del: () => this.midi.unassign(k) })),
+      midiRowCount: this.midi.count(),
+      midiDevNames: this.midi.denied ? "Permiso MIDI denegado: actívalo en el candado de la barra de direcciones." : !this.midi.supported ? "Este navegador no admite Web MIDI (usa Chrome o Edge)." : this.midi.inputs.length ? this.midi.inputs.join(" · ") + (this.midi.outputs.length ? "  (LED: " + this.midi.outputs.length + " salida/s)" : "") : "Ninguna controladora detectada. Conéctala y pulsa «Reconectar».",
+      midiRetry: () => this.midi.init().then(() => this.say(this.midi.inputs.length ? "Controladora conectada" : "No se detecta ninguna controladora")),
+      relOpts: [["twos", "Compl. a 2"], ["offset", "Centro 64"], ["signmag", "Signo+magn."]].map(([id, label]) => ({ label, pick: () => this.midi.setRelMode(id), style: hw(this.midi.relMode === id, "#f2c200", "flex:1 1 0;height:26px;font-size:10px") })),
+      midiExport: () => { const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([this.midi.exportJSON()], { type: "application/json" })); a.download = "mesadj-midi.json"; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 2000); },
+      midiImport: () => this.mapIn.click(),
+      midiStyle: hw(s.midi, "#f2c200", "height:26px"),
+      toast: s.toast, audioHint: s.audioHint, importing: s.importing,
+      prefsOpen: s.prefs, prefsOpenFn: () => { this.setState({ prefs: true }); this.detectDevices(); }, prefsClose: () => this.setState({ prefs: false }),
+      stop: (e) => e.stopPropagation(),
+      prefsBtnStyle: hw(false, "#ecebe8", "height:26px;font-variant-numeric:tabular-nums"),
+      latencyLabel: E && E.ready ? E.latencyMs().toFixed(1) + " ms" : (s.buf / s.rate * 1000).toFixed(1) + " ms",
+      bufOpts: BUFS.map((b) => ({ label: String(b), pick: () => this.applyAudioCfg({ buf: b }), style: hw(s.buf === b, "#22b4e4", "flex:1 1 0") })),
+      rateOpts: RATES.map((r) => ({ label: (r / 1000).toFixed(1) + " kHz", pick: () => this.applyAudioCfg({ rate: r }), style: hw(s.rate === r, "#22b4e4", "flex:1 1 0") })),
+      devOpts: [{ id: "", label: "Predeterminada del sistema" }].concat(s.devOut),
+      phOpts: [{ id: "", label: "Sin auriculares (cue desactivado)" }].concat(s.devOut),
+      masterSink: s.masterSink, phonesSink: s.phonesSink,
+      masterSinkChange: (e) => this.applyAudioCfg({ masterSink: e.target.value }),
+      phonesSinkChange: (e) => this.applyAudioCfg({ phonesSink: e.target.value }),
+      detect: () => this.detectDevices(),
+      selectStyle: "height:30px;padding:0 8px;background:#0b0c0d;color:#ecebe8;border:1px solid #000;border-radius:4px;font-family:var(--font-body);font-size:13px;width:100%",
+
+      laneStyle: "display:block;width:100%;height:" + laneH + "px;cursor:ew-resize;touch-action:none;border-radius:4px",
+      lanes,
+
+      anyPanel: s.panels.fx || s.panels.sampler || s.panels.rec,
+      showFx: s.panels.fx, showSampler: s.panels.sampler, showRec: s.panels.rec,
+      fxType: s.fx.type, fxTypes: FX_TYPES,
+      fxTypeStep: (() => { const step = (n) => () => { const k = FX_TYPES.indexOf(this.state.fx.type); this.setState({ fx: Object.assign({}, this.state.fx, { type: FX_TYPES[(k + n + FX_TYPES.length) % FX_TYPES.length] }) }); }; this.btn("fx.typeprev", "Beat FX · tipo anterior", step(-1)); this.btn("fx.typenext", "Beat FX · tipo siguiente", step(1)); return 0; })(),
+      fxTypeChange: (e) => this.setState({ fx: Object.assign({}, s.fx, { type: e.target.value }) }),
+      fxChans: ["1", "2", "3", "4", "Master"].map((c, k) => ({ label: c === "Master" ? "Mst" : c, pick: this.btn("fx.ch" + c, "Beat FX · canal " + c, () => this.setState({ fx: Object.assign({}, this.state.fx, { ch: c }) }), null, () => this.state.fx.ch === c), style: hw(s.fx.ch === c, k < 4 ? C[k] : "#ecebe8", "height:26px;padding:0 9px") })),
+      smallBtn: hw(false, "#ecebe8", "height:26px;width:28px;padding:0"),
+      smallBtnWide: hw(false, "#ecebe8", "height:30px"),
+      fxPrev: this.btn("fx.prev", "Beat FX ◀", () => { const k = FX_BEATS.indexOf(this.state.fx.beats); this.setState({ fx: Object.assign({}, this.state.fx, { beats: FX_BEATS[Math.max(0, k - 1)] }) }); }),
+      fxNext: this.btn("fx.next", "Beat FX ▶", () => { const k = FX_BEATS.indexOf(this.state.fx.beats); this.setState({ fx: Object.assign({}, this.state.fx, { beats: FX_BEATS[Math.min(FX_BEATS.length - 1, k + 1)] }) }); }),
+      fxBeats: beatsLabel(s.fx.beats) + " beat",
+      fxMs: Math.round(s.fx.beats * 60000 / this.bpmEff(s.master)) + " ms",
+      fxKnob: this.knob("Nivel", s.fx.level, (v) => this.setState({ fx: Object.assign({}, this.state.fx, { level: v }) }), 0.5, "fx.level", "Beat FX · Nivel"),
+      fxToggle: this.btn("fx.on", "Beat FX on/off", () => this.setState({ fx: Object.assign({}, this.state.fx, { on: !this.state.fx.on }) }), null, () => this.state.fx.on),
+      fxOnStyle: hw(s.fx.on, "#a07cff", "height:32px;padding:0 14px"),
+      fxOnLabel: s.fx.on ? "FX on" : "FX off",
+      samples: s.smpNames.map((n, k) => ({ label: n, fire: this.btn("smp" + k, "Sampler " + (k + 1), () => this.fireSample(k)), load: (e) => { e.preventDefault(); this.smpK = k; this.smpIn.click(); }, style: hw(s.smpFlash === k, "#ff2e8e", "height:26px;font-size:10px;letter-spacing:0.04em;padding:0 4px") })),
+      smpKnob: this.knob("Volumen", s.smpVol, (v) => this.setState({ smpVol: v }), 0.5, "smp.vol", "Sampler · Volumen"),
+
+      sides: sideDecks.map((i, side) => this.deckVals(i, side)),
+      channels,
+      xfHandle: "position:absolute;top:0;bottom:0;width:22px;border-radius:3px;background:linear-gradient(90deg,#5b5d62,#2a2b2f);box-shadow:0 3px 6px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.2);left:calc(" + (s.xf * 100).toFixed(1) + "% - 11px)",
+      xfDown: (() => { const set = (v) => this.setState({ xf: v }); this.midi.register("xf", { set }); this.names.xf = "Crossfader"; return this.learnable("xf", "Crossfader", (e) => this.drag(e, (r, ev) => set(this.clamp((ev.clientX - r.left) / r.width)))); })(),
+      xfReset: () => this.setState({ xf: 0.5 }),
+      masterKnobs: [
+        this.knob("Master", s.mvol, (v) => this.setState({ mvol: v }), 0.75, "mvol", "Master"),
+        this.knob("Cue / Mst", s.phMix, (v) => this.setState({ phMix: v }), 0.5, "phmix", "Cue / Master"),
+        this.knob("Auricular", s.phVol, (v) => this.setState({ phVol: v }), 0.5, "phvol", "Volumen auriculares"),
+      ],
+
+      rowCount: list.length + " pistas",
+      query: s.query, onQuery: (e) => this.setState({ query: e.target.value, sel: 0 }),
+      pickFiles: () => this.fileIn.click(), pickFolder: () => this.dirIn.click(),
+      onDragOver: (e) => { e.preventDefault(); if (!s.dragging) this.setState({ dragging: true }); },
+      onDragLeave: (e) => { if (!e.currentTarget.contains(e.relatedTarget)) this.setState({ dragging: false }); },
+      onDrop: async (e) => { e.preventDefault(); this.setState({ dragging: false }); this.importFiles(await this.collectDropped(e.dataTransfer)); },
+      dropZoneStyle: "margin:0 14px 8px;padding:" + (LIB.length ? "8px" : "26px") + " 12px;border:2px dashed " + (s.dragging ? "#22b4e4" : "rgba(236,235,232,0.25)") + ";border-radius:8px;text-align:center;font-size:13px;color:" + (s.dragging ? "#5cc9ee" : "rgba(236,235,232,0.6)") + ";background:" + (s.dragging ? "rgba(34,180,228,0.12)" : "transparent"),
+      dropZoneText: s.dragging ? "Suelta para añadir" : "Arrastra aquí tus canciones o carpetas (MP3, WAV, FLAC, AAC, OGG…) · o suéltalas directamente sobre un deck",
+      canRemove: !!selTrack,
+      removeLabel: "Quitar de la lista",
+      removeFn: () => {
+        if (!selTrack) return;
+        if (!window.confirm("¿Quitar «" + selTrack.title + "» de la lista?")) return;
+        [0, 1, 2, 3].forEach((di) => { if (s.decks[di].track === selTrack.id) { this.eng.eject(di); this.updDeck(di, mkDeck(0, { padMode: s.decks[di].padMode })); this.t[di] = 0; this.lastEng[di] = 0; } });
+        DJLibrary.remove(selTrack.id); const k = LIB.indexOf(selTrack); if (k >= 0) LIB.splice(k, 1); syncLib(); this.setState((st) => ({ libVer: st.libVer + 1, sel: 0 }));
+      },
+      bpmHalf: () => { if (selTrack) { selTrack.bpm = Math.round(selTrack.bpm / 2 * 100) / 100; touch(selTrack); } },
+      bpmDouble: () => { if (selTrack) { selTrack.bpm = Math.round(selTrack.bpm * 2 * 100) / 100; touch(selTrack); } },
+      rows: list.map((t, k) => {
+        const at = visDecks.filter((di) => s.decks[di].track === t.id);
+        const isSel = k === sel;
+        return {
+          sel: isSel ? "1" : "0",
+          num: String(k + 1).padStart(2, "0"),
+          title: t.title, artist: t.artist, bpm: t.bpm, key: t.key, dur: mmss(t.dur),
+          loaded: at.map((di) => di + 1).join(""),
+          dot: at.length ? "display:inline-grid;place-items:center;min-width:16px;height:16px;padding:0 3px;border-radius:3px;font-size:10px;font-weight:600;color:#0b0b0c;background:" + C[at[0]] : "",
+          style: "display:grid;grid-template-columns:30px 30px minmax(0,1.6fr) minmax(0,1.2fr) 64px 56px 76px;cursor:pointer;" + (isSel ? "background:" + (s.focus === "list" ? "rgba(34,180,228,0.22)" : "rgba(255,255,255,0.07)") + ";" : k % 2 ? "background:rgba(255,255,255,0.02);" : ""),
+          pick: () => this.setState({ sel: k, focus: "list" }),
+          loadL: () => this.loadTrack(sideDecks[0], t),
+        };
+      }),
+      browserEmpty: list.length === 0,
+      emptyMsg: LIB.length ? "No hay pistas que coincidan." : "Aún no hay pistas. Arrástralas a la zona de arriba.",
+      encRot: "position:absolute;inset:0;transform:rotate(" + (sel * 24) + "deg)",
+      encDown: (() => {
+        this.midi.register("enc", { delta: (n) => moveSel(n > 0 ? 1 : -1) }); this.names.enc = "Encoder del navegador";
+        this.midi.register("enc.press", { fire: press }); this.names["enc.press"] = "Encoder · pulsar";
+        return this.learnable("enc", "Encoder del navegador", (e) => {
+          const y0 = e.clientY; let steps = 0, moved = false;
+          this.drag(e, (r, ev) => {
+            const st = Math.round((ev.clientY - y0) / 16);
+            if (st !== steps) { moved = true; moveSel(st - steps); steps = st; }
+          }, () => { if (!moved) press(); });
+        });
+      })(),
+      encWheel: (e) => moveSel(e.deltaY > 0 ? 1 : -1),
+      back: this.btn("browser.back", "Navegador · Back", () => this.setState({ sel: 0 })),
+      loadL: this.btn("load.0", "Cargar en deck izquierdo", loadSide(0)), loadR: this.btn("load.1", "Cargar en deck derecho", loadSide(1)),
+      loadLNum: sideDecks[0] + 1, loadRNum: sideDecks[1] + 1,
+      loadLStyle: hw(false, C[sideDecks[0]], "height:30px;color:" + C[sideDecks[0]]),
+      loadRStyle: hw(false, C[sideDecks[1]], "height:30px;color:" + C[sideDecks[1]]),
+    };
+  }
+}
+</script>
+</body>
+</html>
